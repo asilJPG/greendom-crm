@@ -235,6 +235,33 @@ module.exports = handler(
       );
       return res.status(200).json(rows);
     }
+    if (req.method === 'PATCH') {
+      if (req.user.role !== 'admin') return res.status(403).json({ error: 'только для администратора' });
+      const b = req.body || {};
+      const rows = b.id
+        ? await query(`SELECT * FROM commands WHERE id=$1 AND status='pending'`, [Number(b.id)])
+        : await query(`SELECT * FROM commands WHERE status='pending' ORDER BY id LIMIT 50`);
+      let appliedCount = 0;
+      let rejectedCount = 0;
+      for (const c of rows) {
+        try {
+          const r = await applyInCloud({ name: c.user_name, role: c.user_role }, c.kind, c.payload || {});
+          await query(`UPDATE commands SET status='applied', result=$1, done_ts=now() WHERE id=$2`, [r.result, c.id]);
+          appliedCount++;
+        } catch (e) {
+          const msg = e.status ? e.message : 'ошибка применения';
+          if (msg === 'ничего не изменилось') {
+            await query(`UPDATE commands SET status='applied', result='уже применено', done_ts=now() WHERE id=$1`, [c.id]);
+            appliedCount++;
+          } else {
+            await query(`UPDATE commands SET status='rejected', result=$1, done_ts=now() WHERE id=$2`, [`отклонено: ${msg}`.slice(0, 300), c.id]);
+            rejectedCount++;
+          }
+        }
+      }
+      await audit(req, req.user.name, 'command_apply', `применено=${appliedCount} отклонено=${rejectedCount}`);
+      return res.status(200).json({ ok: true, applied: appliedCount, rejected: rejectedCount });
+    }
     const b = req.body || {};
     const kind = String(b.kind || '');
     try {
@@ -266,5 +293,5 @@ module.exports = handler(
       throw e;
     }
   },
-  { method: ['GET', 'POST'], roles: ['keeper', 'admin'] }
+  { method: ['GET', 'POST', 'PATCH'], roles: ['keeper', 'admin'] }
 );

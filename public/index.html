@@ -256,7 +256,7 @@
       <p class="sub">Приход, продажи и выручка за период</p>
       <div class="card filters">
         <div class="chips">
-          <button class="chip" data-range="0">Сегодня</button><button class="chip" data-range="6">7 дней</button><button class="chip" data-range="29">30 дней</button>
+          <button class="chip" data-range="month">Этот месяц</button><button class="chip" data-range="0">Сегодня</button><button class="chip" data-range="6">7 дней</button><button class="chip" data-range="29">30 дней</button>
         </div>
         <div class="daterow"><input type="date" id="r-from" aria-label="С даты"><input type="date" id="r-to" aria-label="По дату"></div>
         <button class="btn block" id="r-go">Показать</button>
@@ -324,8 +324,13 @@
     </div>
 
     <section id="p-queue" hidden>
-      <h1 class="page">Очередь</h1>
-      <p class="sub">Операции и правки с сайта. Изменения применяются на сайте сразу, а моноблок подтягивает их при выходе на связь.</p>
+      <div class="page-head">
+        <div>
+          <h1 class="page">Очередь</h1>
+          <p class="sub">Операции и правки с сайта. Изменения применяются на сайте сразу, а моноблок подтягивает их при выходе на связь.</p>
+        </div>
+        <button class="btn" id="q-apply" hidden>Применить ожидающие в БД</button>
+      </div>
       <div class="card"><div id="ops-list"></div></div>
     </section>
 
@@ -524,7 +529,7 @@ function go(id) {
   $('ops-shared').hidden = !isOp;
   clearInterval(opsTimer); closeDrawer(); window.scrollTo(0, 0);
   if (id === 'stock') loadStock();
-  if (id === 'report') { if (!$('r-from').value) { $('r-from').value = iso(new Date()); $('r-to').value = iso(new Date()); } loadReport(); }
+  if (id === 'report') { if (!$('r-from').value) { const today = iso(new Date()); $('r-from').value = today.slice(0, 8) + '01'; $('r-to').value = today; } loadReport(); }
   if (id === 'history') loadHistory();
   if (isOp) { fillGrades(); scaleAuto(); if (id === 'sale' && !$('sl-items').children.length) addSaleRow(); }
   if (id === 'queue') { loadOps(); opsTimer = setInterval(loadOps, 8000); }
@@ -541,7 +546,12 @@ async function loadStock() {
 }
 
 /* ───── отчёт ───── */
-document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => { $('r-from').value = shift(+b.dataset.range); $('r-to').value = iso(new Date()); loadReport(); });
+document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => {
+  const today = iso(new Date());
+  $('r-from').value = b.dataset.range === 'month' ? today.slice(0, 8) + '01' : shift(+b.dataset.range);
+  $('r-to').value = today;
+  loadReport();
+});
 $('r-go').onclick = loadReport;
 async function loadReport() {
   const r = await api('GET', `/api/report?from=${$('r-from').value}&to=${$('r-to').value}`); if (!r.ok) return; const d = r.data;
@@ -681,9 +691,19 @@ async function loadOps() {
   fillGrades();
   const pend = r.data.filter(c => c.status === 'pending').length;
   const qb = $('q-badge'); if (qb) { qb.textContent = pend; qb.hidden = !pend; }
+  const qa = $('q-apply'); if (qa) qa.hidden = !(me && me.role === 'admin' && pend > 0);
   const desc = c => { const p = c.payload || {}; return c.kind === 'intake' ? `${p.grade} ${p.net_kg} кг` : c.kind === 'writeoff' ? `${p.grade} ${p.net_kg} кг, ${p.reason}` : c.kind === 'sale' ? `${p.customer}: ${(p.items || []).map(i => i.grade + ' ' + i.net_kg).join(', ')}` : c.kind === 'edit' ? `запись #${p.id}: ${p.reason}` : `#${p.id}: ${p.reason}`; };
   $('ops-list').innerHTML = r.data.length ? `<ul class="list">${r.data.map(c => { const [t, cl] = ST[c.status] || [c.status, '']; return row(`${esc(KIND[c.kind] || c.kind)} <span class="badge ${cl}">${t}</span>`, `${esc(desc(c))}${c.result ? '<br>' + esc(c.result) : ''}`, `<span class="small muted">${esc(c.ts.slice(5))}</span>`); }).join('')}</ul>` : '<div class="empty">Пока ничего</div>';
 }
+$('q-apply').onclick = async () => {
+  const b = $('q-apply'); b.disabled = true;
+  try {
+    const r = await api('PATCH', '/api/command', {});
+    if (!r.ok) { toast(msg(r), true); return; }
+    toast(`Применено в БД: ${r.data.applied}${r.data.rejected ? `, отклонено: ${r.data.rejected}` : ''}`);
+    await loadOps();
+  } finally { b.disabled = false; }
+};
 
 /* ───── исправление записи (админ) ───── */
 let edTarget = null;

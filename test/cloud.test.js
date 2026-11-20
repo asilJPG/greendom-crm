@@ -395,6 +395,15 @@ test('операции с сайта: мгновенное применение,
   assert.equal((await dev({})).body.commands.length, 0);
   assert.equal((await call(command, adm)).body.find((r) => r.id === edit2.body.id).status, 'expired');
 
+  // PATCH /api/command: админ может применить старые зависшие pending-команды в БД
+  await db.query(`INSERT INTO commands(device,user_name,user_role,kind,payload,status) VALUES('point-1','Администратор','admin','edit','{"id":1,"reason":"старая очередь","net_kg":95}'::jsonb,'pending')`);
+  assert.equal((await call(command, { method: 'PATCH', body: {}, ...as(keeper) })).code, 403, 'складовщик не применяет очередь');
+  const patchRes = await call(command, { method: 'PATCH', body: {}, ...adm });
+  assert.equal(patchRes.code, 200);
+  assert.equal(patchRes.body.applied, 1);
+  const [m1Applied] = await db.query(`SELECT net_kg FROM movements WHERE device='point-1' AND id=1`);
+  assert.equal(m1Applied.net_kg, 95, 'старая команда из очереди применилась в movements');
+
   // лимит 20 ожидающих команд на человека
   for (let i = 0; i < 20; i++) {
     await db.query(`INSERT INTO commands(device,user_name,user_role,kind,payload,status) VALUES('point-1','Складовщик Анвар','keeper','edit','{"id":1}'::jsonb,'pending')`);
