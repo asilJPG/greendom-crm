@@ -80,10 +80,16 @@ test('setup: создаёт первого админа один раз, пов�
   assert.equal(n, 1);
 });
 
-test('пароль в базе хранится хэшем, а не открытым текстом', async () => {
-  const [u] = await globalThis.__TEST_DB.query('SELECT pass_hash FROM app_users');
+test('пароль в базе хранится хэшем и шифром, а не открытым текстом; админ видит пароль в /api/users', async () => {
+  const [u] = await globalThis.__TEST_DB.query('SELECT pass_hash, pass_enc FROM app_users');
   assert.match(u.pass_hash, /^scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}$/);
   assert.ok(!u.pass_hash.includes(OWNER_PW));
+  assert.ok(u.pass_enc.startsWith('gcm$'));
+  assert.ok(!u.pass_enc.includes(OWNER_PW));
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const list = await call(users, as(admin));
+  assert.equal(list.code, 200);
+  assert.equal(list.body[0].password, OWNER_PW);
 });
 
 // ───────── приёмник (ключ моноблока) ─────────

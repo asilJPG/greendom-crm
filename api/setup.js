@@ -1,7 +1,7 @@
 // Первичная настройка: создаёт первого администратора. Работает только пока в базе нет ни одного пользователя
 // и только с одноразовым ключом установки (SETUP_KEY из настроек проекта).
 const { query, ensureSchema } = require('../lib/db');
-const { safeEqual, hashPassword, clientIp, audit } = require('../lib/auth');
+const { safeEqual, hashPassword, encryptPassword, clientIp, audit } = require('../lib/auth');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'только POST' });
@@ -29,8 +29,8 @@ module.exports = async (req, res) => {
     // (смена, создание пользователей) проходят через MIN_PASSWORD в password.js / users.js.
     if (password.length < 4) return res.status(400).json({ error: 'Пароль слишком короткий (минимум 4 символа)' });
     await query(
-      `INSERT INTO app_users(name, role, pass_hash, must_change) VALUES ($1, 'admin', $2, $3)`,
-      [name, hashPassword(password), temporary]
+      `INSERT INTO app_users(name, role, pass_hash, pass_enc, must_change) VALUES ($1, 'admin', $2, $3, $4)`,
+      [name, hashPassword(password), encryptPassword(password), temporary]
     );
     await audit(req, name, 'setup', 'создан первый администратор');
     res.status(200).json({ ok: true, name, must_change: temporary });

@@ -355,22 +355,39 @@ async function loadUsers() {
     const el = document.createElement('div');
     el.className = 'li';
     el.style.cssText = 'display:block';
+    const pwHtml = u.password
+      ? `<span class="small muted" style="margin-left:4px">· пароль: <code class="pw-val" style="font-family:ui-monospace,monospace;background:var(--soft);padding:2px 6px;border-radius:6px;cursor:pointer" title="Нажмите, чтобы скопировать">••••••</code></span>`
+      : '';
     el.innerHTML =
       `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(u.name)}</b>` +
       `<span class="badge b-${u.role}">${ROLE_NAME[u.role] || u.role}</span>` +
       `${u.active ? '<span class="badge b-active">Активен</span>' : '<span class="badge b-off">Отключён</span>'}</div>` +
-      `<div class="s small muted" style="margin-top:3px">${u.must_change ? 'ещё не сменил пароль · ' : ''}вход: ${esc(u.last_login || '—')}</div>` +
-      `<div class="acts"><button class="btn sec sm" data-a="name">Имя</button>` +
+      `<div class="s small muted" style="margin-top:4px">вход: ${esc(u.last_login || '—')}${pwHtml}</div>` +
+      `<div class="acts">${u.password ? '<button class="btn sec sm" data-a="showpw">Показать пароль</button>' : ''}<button class="btn sec sm" data-a="name">Имя</button>` +
       `<select class="rolesel" aria-label="Роль" style="width:auto;min-height:34px;padding:6px 10px;font-size:13.5px;border-radius:9px">` +
       `${Object.entries(ROLE_NAME).map(([k, v]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${v}</option>`).join('')}</select>` +
       `<button class="btn sec sm" data-a="pw">Новый пароль</button>` +
       `<button class="btn sec sm" data-a="active">${u.active ? 'Отключить' : 'Включить'}</button></div>`;
+    let pwShown = false;
+    const pwCode = el.querySelector('.pw-val');
+    if (pwCode) {
+      pwCode.onclick = () => {
+        if (!pwShown) return;
+        navigator.clipboard?.writeText(u.password).then(() => toast('Пароль скопирован')).catch(() => {});
+      };
+    }
     el.querySelector('.rolesel').onchange = async (e) => {
       const r2 = await api('PATCH', '/api/users', { id: u.id, role: e.target.value });
       toast(r2.ok ? 'Роль изменена' : errMsg(r2), !r2.ok);
       loadUsers();
     };
     el.querySelectorAll('button').forEach((b) => (b.onclick = async () => {
+      if (b.dataset.a === 'showpw') {
+        pwShown = !pwShown;
+        pwCode.textContent = pwShown ? u.password : '••••••';
+        b.textContent = pwShown ? 'Скрыть пароль' : 'Показать пароль';
+        return;
+      }
       if (b.dataset.a === 'pw') return openPw(u);
       const patch = { id: u.id };
       if (b.dataset.a === 'name') {

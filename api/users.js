@@ -1,6 +1,6 @@
 const { query } = require('../lib/db');
 const { handler, TZ } = require('../lib/http');
-const { MIN_PASSWORD, hashPassword, passwordTaken, audit } = require('../lib/auth');
+const { MIN_PASSWORD, hashPassword, encryptPassword, decryptPassword, passwordTaken, audit } = require('../lib/auth');
 
 const ROLES = ['admin', 'director', 'keeper'];
 
@@ -41,12 +41,14 @@ module.exports = handler(
           return res.status(200).json(log);
         }
         const users = await query(
-          `SELECT id, name, role, active, must_change,
+          `SELECT id, name, role, active, must_change, pass_enc,
                   to_char(last_login at time zone $1,'YYYY-MM-DD HH24:MI') AS last_login
            FROM app_users ORDER BY id`,
           [TZ]
         );
-        return res.status(200).json(users);
+        return res.status(200).json(
+          users.map(({ pass_enc, ...u }) => ({ ...u, password: decryptPassword(pass_enc) }))
+        );
       }
 
       const b = req.body || {};
@@ -56,16 +58,16 @@ module.exports = handler(
         const role = ROLES.includes(b.role) ? b.role : 'director';
         const [dup] = await query('SELECT 1 FROM app_users WHERE lower(name)=lower($1)', [name]);
         if (dup) return res.status(409).json({ error: 'Такое имя уже есть' });
-        if (await passwordTaken(password)) return res.status(409).json({ error: 'Такой пароль уже используется, выберите другой' });
+        if (await passwordTaken(password)) return res.status(409).json({ error: 'Выберите другой пароль' });
         const [u] = await query(
-          'INSERT INTO app_users(name, role, pass_hash, must_change) VALUES ($1,$2,$3,false) RETURNING id',
-          [name, role, hashPassword(password)]
+          'INSERT INTO app_users(name, role, pass_hash, pass_enc, must_change) VALUES ($1,$2,$3,$4,false) RETURNING id',
+          [name, role, hashPassword(password), encryptPassword(password)]
         );
         await audit(req, req.user.name, 'user_add', `#${u.id} ${name} (${role})`);
         return res.status(200).json({ ok: true, id: u.id });
       }
 
-      // PATCH: изменить имя, роль, отключить/включить или задать новый временный пароль
+      // PATCH: изменить имя, роль, отключить/включить или задать новый пароль
       const id = Number(b.id);
       const [target] = Number.isInteger(id) ? await query('SELECT * FROM app_users WHERE id=$1', [id]) : [];
       if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -83,18 +85,20 @@ module.exports = handler(
       }
       let bump = !active && target.active; // отключили: все входы пользователя сбрасываются
       let passHash = target.pass_hash;
+      let passEnc = target.pass_enc;
       let mustChange = target.must_change;
       if (b.password !== undefined) {
         const pw = cleanPassword(b.password);
-        if (await passwordTaken(pw, id)) return res.status(409).json({ error: 'Такой пароль уже используется, выберите другой' });
+        if (await passwordTaken(pw, id)) return res.status(409).json({ error: 'Выберите другой пароль' });
         passHash = hashPassword(pw);
+        passEnc = encryptPassword(pw);
         mustChange = false; // пароль, заданный администратором, сразу постоянный
         bump = true;
       }
       await query(
-        `UPDATE app_users SET name=$1, role=$2, active=$3, pass_hash=$4, must_change=$5,
-                token_version = token_version + $6 WHERE id=$7`,
-        [name, role, active, passHash, mustChange, bump ? 1 : 0, id]
+        `UPDATE app_users SET name=$1, role=$2, active=$3, pass_hash=$4, pass_enc=$5, must_change=$6,
+                token_version = token_version + $7 WHERE id=$8`,
+        [name, role, active, passHash, passEnc, mustChange, bump ? 1 : 0, id]
       );
       await audit(req, req.user.name, 'user_edit', `#${id} ${name} роль=${role} активен=${active}${b.password !== undefined ? ' новый пароль' : ''}`);
       return res.status(200).json({ ok: true });
