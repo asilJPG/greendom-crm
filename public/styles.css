@@ -346,6 +346,7 @@ dialog#inv-dlg { width: min(640px, 100%); }
   body > *:not(#print-root) { display: none !important; }
   #print-root { display: block !important; padding: 12mm; }
   .inv-sheet { font-size: 13pt; }
+  .no-print { display: none !important; }
 }
 
 /* ───── сенсорный моноблок: большое табло весов + крупные плитки сортов и покупателей ───── */
@@ -394,6 +395,20 @@ dialog#inv-dlg { width: min(640px, 100%); }
 .pnl-total td { font-weight: 800; font-size: 15px; border-top: 2px solid var(--ink); border-bottom: 0; padding-top: 12px; }
 .pnl-total.pos td { color: var(--grn); background: var(--grn-bg); }
 .pnl-total.neg td { color: var(--red); background: var(--red-bg); }
+.pnl-click { cursor: pointer; transition: background .12s; }
+.pnl-click:hover td { background: var(--soft2); }
+.pnl-arr { color: var(--mut); font-weight: 400; margin-left: 4px; }
+dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
+
+/* ───── Контрагенты и взаиморасчёты ───── */
+.cp-card { background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; }
+.cp-card.off { opacity: .62; }
+.cp-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.cp-name { font-size: 16px; font-weight: 700; color: var(--ink); }
+.bal-pill { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bal-pill.pos { background: var(--grn-bg); color: var(--grn); }
+.bal-pill.neg { background: var(--red-bg); color: var(--red); }
+.bal-pill.zero { background: var(--soft2); color: var(--mut); }
 @media (max-width: 640px) { .hide-sm { display: none; } }
 
 /* широкий экран: закреплённая левая панель #f1f1f1 */

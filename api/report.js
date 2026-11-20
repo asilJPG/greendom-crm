@@ -1,6 +1,7 @@
 const { query } = require('../lib/db');
 const { handler, dateRange } = require('../lib/http');
 const { handleExpenses } = require('../lib/expenses');
+const { handlePayments, handleReconcile } = require('../lib/reconcile');
 
 const R3 = (e) => `ROUND(${e}::numeric,3)::float8`;
 const R2 = (e) => `ROUND(${e}::numeric,2)::float8`;
@@ -23,6 +24,8 @@ function csvCell(v) {
 
 module.exports = handler(async (req, res) => {
   if (req.query.resource === 'expenses') return handleExpenses(req, res);
+  if (req.query.resource === 'reconcile') return handleReconcile(req, res);
+  if (req.query.resource === 'payments') return handlePayments(req, res);
   if (req.method !== 'GET') return res.status(405).json({ error: 'только GET' });
 
   const [from, to] = dateRange(req.query.from, req.query.to);
@@ -73,7 +76,7 @@ module.exports = handler(async (req, res) => {
   const prevW = makeWhere(1);
   const pp = [pFrom, pTo, ...prevW.extra];
 
-  const [by_grade, by_day, by_worker, by_customer, [manual], [cancelled], [prevRow], saleRows, filterGrades, filterCustomers, expByCat, [prevExpRow]] = await Promise.all([
+  const [by_grade, by_day, by_worker, by_customer, [manual], [cancelled], [prevRow], saleRows, filterGrades, filterCustomers, expByCat, [prevExpRow], expenseDocs, lossDocs] = await Promise.all([
     query(
       `SELECT grade,
          ${R3(`SUM(CASE WHEN type='in' THEN net_kg ELSE 0 END)`)} AS in_kg,
@@ -122,6 +125,21 @@ module.exports = handler(async (req, res) => {
       `SELECT ${R2('COALESCE(SUM(amount),0)')} AS amount FROM expenses
        WHERE status='active' AND doc_date BETWEEN $1::date AND $2::date`,
       [pFrom, pTo]
+    ),
+    query(
+      `SELECT e.id, to_char(e.doc_date,'YYYY-MM-DD') AS doc_date, c.name AS category,
+              e.amount, e.counterparty, e.payment_method, e.comment, e.user_name
+       FROM expenses e JOIN expense_categories c ON c.id=e.category_id
+       WHERE e.status='active' AND e.doc_date BETWEEN $1::date AND $2::date
+       ORDER BY e.doc_date DESC, e.id DESC LIMIT 300`,
+      [from, to]
+    ),
+    query(
+      `SELECT device, id, to_char(ts,'YYYY-MM-DD HH24:MI') AS ts, type, grade, net_kg, note, user_name
+       FROM movements
+       WHERE ${curW.sql} AND (type='writeoff' OR (type='in' AND lower(grade) LIKE '%брак%'))
+       ORDER BY ts DESC, id DESC LIMIT 300`,
+      p
     ),
   ]);
 
@@ -229,6 +247,8 @@ module.exports = handler(async (req, res) => {
     by_customer: enrichedCustomers,
     by_expense_category,
     sales,
+    expense_docs: expenseDocs,
+    loss_docs: lossDocs,
     filters: {
       grades: filterGrades.map((r) => r.grade),
       customers: filterCustomers.map((r) => r.customer),

@@ -86,16 +86,16 @@ function renderPnl(d) {
   const expPctOfRev = s.amount > 0 ? Math.round((s.expenses_total / s.amount) * 1000) / 10 : 0;
 
   const gradeSubRows = d.by_grade.filter((g) => g.amount > 0 || g.out_kg > 0).map((g) => `
-    <tr class="pnl-sub">
-      <td><span class="sw" style="--gc:${deps.gradeColor(g.grade)};margin-right:8px"></span>${esc(g.grade)} <span class="small muted">(${kg(g.out_kg)} кг${g.avg_price ? ` × ${money(g.avg_price)}` : ''})</span></td>
+    <tr class="pnl-sub pnl-click" data-drill="rev-grade" data-key="${esc(g.grade)}">
+      <td><span class="sw" style="--gc:${deps.gradeColor(g.grade)};margin-right:8px"></span>${esc(g.grade)} <span class="small muted">(${kg(g.out_kg)} кг${g.avg_price ? ` × ${money(g.avg_price)}` : ''})</span> <span class="pnl-arr">›</span></td>
       <td class="num">${money(g.amount)}</td>
       <td class="num muted">${g.share_pct}%</td>
       <td class="num muted hide-sm">—</td>
     </tr>`).join('');
 
   const expSubRows = (d.by_expense_category || []).map((e) => `
-    <tr class="pnl-sub">
-      <td>${esc(e.category)} <span class="small muted">(актов: ${e.acts})</span></td>
+    <tr class="pnl-sub pnl-click" data-drill="exp-cat" data-key="${esc(e.category)}">
+      <td>${esc(e.category)} <span class="small muted">(актов: ${e.acts})</span> <span class="pnl-arr">›</span></td>
       <td class="num">−${money(e.amount)}</td>
       <td class="num muted">${e.rev_pct || 0}%</td>
       <td class="num muted hide-sm">${e.share_pct}% расх.</td>
@@ -128,7 +128,7 @@ function renderPnl(d) {
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <h2 style="margin:0">Отчёт о прибылях и убытках (ОПиУ)</h2>
-        <span class="small muted">сравнение с ${dm(p.from)}–${dm(p.to)}</span>
+        <span class="small muted">нажмите на статью для документов · сравнение с ${dm(p.from)}–${dm(p.to)}</span>
       </div>
       <div class="pnl-wrap">
         <table class="pnl-tbl">
@@ -141,22 +141,22 @@ function renderPnl(d) {
             </tr>
           </thead>
           <tbody>
-            <tr class="pnl-grp">
-              <td>+ Выручка от реализации</td>
+            <tr class="pnl-grp pnl-click" data-drill="rev-all">
+              <td>+ Выручка от реализации <span class="pnl-arr">›</span></td>
               <td class="num">${money(s.amount)}</td>
               <td class="num">100%</td>
               <td class="num hide-sm">${money(p.amount)} ${deltaBadge(s.amount, p.amount)}</td>
             </tr>
             ${gradeSubRows}
-            <tr class="pnl-grp">
-              <td>− Операционные расходы</td>
+            <tr class="pnl-grp pnl-click" data-drill="exp-all">
+              <td>− Операционные расходы <span class="pnl-arr">›</span></td>
               <td class="num">−${money(s.expenses_total)}</td>
               <td class="num">${expPctOfRev}%</td>
               <td class="num hide-sm">−${money(p.expenses_total)} ${deltaBadge(s.expenses_total, p.expenses_total, true)}</td>
             </tr>
             ${expSubRows}
-            <tr class="pnl-info">
-              <td>Справочно: потери (списание + брак)</td>
+            <tr class="pnl-info pnl-click" data-drill="loss">
+              <td>Справочно: потери (списание + брак) <span class="pnl-arr">›</span></td>
               <td class="num muted">${kg(s.loss_kg)} кг${s.loss_value ? ` (~${money(s.loss_value)})` : ''}</td>
               <td class="num muted">${s.loss_pct}% сб.</td>
               <td class="num muted hide-sm">${kg(p.loss_kg)} кг</td>
@@ -224,6 +224,86 @@ function renderBuyers(d) {
   return `<div class="card"><h2>Покупатели <span class="small muted" style="font-weight:400">(нажмите на покупателя для накладных)</span></h2>${blocks}</div>`;
 }
 
+const PAY_LABEL = { cash: 'Наличные', card: 'Карта', transfer: 'Перечисление' };
+
+function openDrill(kind, key, d) {
+  const dlg = $('drill-dlg');
+  if (!dlg) return;
+  const cur = deps.cur();
+  let title = '';
+  let sub = `${dm(d.from)}–${dm(d.to)}`;
+  let html = '';
+
+  if (kind === 'rev-all' || kind === 'rev-grade') {
+    const list = kind === 'rev-all'
+      ? (d.sales || [])
+      : (d.sales || []).filter((s) => s.items.some((i) => i.grade === key));
+    title = kind === 'rev-all' ? 'Выручка — все продажи' : `Выручка — сорт «${key}»`;
+    const sum = list.reduce((a, s) => a + (kind === 'rev-all'
+      ? Number(s.total_amount || 0)
+      : s.items.filter((i) => i.grade === key).reduce((x, i) => x + Number(i.amount || 0), 0)), 0);
+    sub += ` · документов: ${list.length} · ${money(sum)} ${cur}`;
+    html = list.length ? `<ul class="list">${list.map((s) => {
+      const items = kind === 'rev-all' ? s.items : s.items.filter((i) => i.grade === key);
+      const amt = items.reduce((x, i) => x + Number(i.amount || 0), 0);
+      const desc = items.map((i) => `${esc(i.grade)} ${kg(i.net_kg)} кг${i.price_per_kg ? ` × ${money(i.price_per_kg)}` : ''}`).join(', ');
+      return `<li class="li">
+        <div class="l">
+          <div class="t">Продажа №${esc(s.sale_id)} · ${esc(s.customer)}</div>
+          <div class="s">${esc(s.ts)} · ${desc}${s.note ? ' · ' + esc(s.note) : ''}</div>
+        </div>
+        <div class="r" style="display:flex;align-items:center;gap:8px;flex:none">
+          <b>${money(amt)} ${esc(cur)}</b>
+          <button class="btn sec sm" data-drill-inv="${esc(`${s.device}:${s.sale_id}`)}">Накладная</button>
+        </div>
+      </li>`;
+    }).join('')}</ul>` : '<div class="empty">Продаж за период нет</div>';
+  } else if (kind === 'exp-all' || kind === 'exp-cat') {
+    const list = kind === 'exp-all'
+      ? (d.expense_docs || [])
+      : (d.expense_docs || []).filter((e) => e.category === key);
+    title = kind === 'exp-all' ? 'Операционные расходы — все акты' : `Расходы — «${key}»`;
+    const sum = list.reduce((a, e) => a + Number(e.amount || 0), 0);
+    sub += ` · актов: ${list.length} · −${money(sum)} ${cur}`;
+    html = list.length ? `<ul class="list">${list.map((e) => {
+      const meta = [dm(e.doc_date), esc(e.category), PAY_LABEL[e.payment_method] || e.payment_method, e.counterparty ? esc(e.counterparty) : '', e.user_name ? esc(e.user_name) : ''].filter(Boolean).join(' · ');
+      return `<li class="li">
+        <div class="l">
+          <div class="t">Акт №${e.id}${e.comment ? ' · ' + esc(e.comment) : ''}</div>
+          <div class="s">${meta}</div>
+        </div>
+        <div class="r"><b>−${money(e.amount)} ${esc(cur)}</b></div>
+      </li>`;
+    }).join('')}</ul>` : '<div class="empty">Актов расхода за период нет</div>';
+  } else if (kind === 'loss') {
+    const list = d.loss_docs || [];
+    title = 'Потери (списание и брак)';
+    const sumKg = list.reduce((a, x) => a + Number(x.net_kg || 0), 0);
+    sub += ` · записей: ${list.length} · ${kg(sumKg)} кг`;
+    html = list.length ? `<ul class="list">${list.map((x) => `
+      <li class="li">
+        <div class="l">
+          <div class="t">${x.type === 'writeoff' ? 'Списание' : 'Брак (приход)'} · ${esc(x.grade)}</div>
+          <div class="s">${esc(x.ts)}${x.note ? ' · ' + esc(x.note) : ''}${x.user_name ? ' · ' + esc(x.user_name) : ''}</div>
+        </div>
+        <div class="r"><b>${kg(x.net_kg)} кг</b></div>
+      </li>`).join('')}</ul>` : '<div class="empty">Потерь за период нет</div>';
+  }
+
+  $('drill-title').textContent = title;
+  $('drill-sub').textContent = sub;
+  $('drill-body').innerHTML = html;
+
+  const salesIndex = Object.fromEntries((d.sales || []).map((s) => [`${s.device}:${s.sale_id}`, s]));
+  $('drill-body').querySelectorAll('[data-drill-inv]').forEach((b) => {
+    b.onclick = () => {
+      const s = salesIndex[b.dataset.drillInv];
+      if (s) openInvoice(s, { crop: deps.crop(), cur: deps.cur() });
+    };
+  });
+  dlg.showModal();
+}
+
 function renderBody() {
   if (!lastData) return;
   const d = lastData;
@@ -270,6 +350,10 @@ function renderBody() {
     el.onclick = () => deps.openHistoryDay(el.dataset.day);
   });
 
+  $('r-body').querySelectorAll('[data-drill]').forEach((tr) => {
+    tr.onclick = () => openDrill(tr.dataset.drill, tr.dataset.key || '', d);
+  });
+
   const salesIndex = Object.fromEntries(d.sales.map((s) => [`${s.device}:${s.sale_id}`, s]));
   $('r-body').querySelectorAll('[data-inv]').forEach((b) => {
     b.onclick = () => {
@@ -314,4 +398,5 @@ export function initReport(config) {
   $('r-grade').onchange = loadReport;
   $('r-cust').onchange = loadReport;
   $('r-csv').onclick = () => { window.location.href = buildReportQuery('csv'); };
+  if ($('drill-close')) $('drill-close').onclick = () => $('drill-dlg').close();
 }

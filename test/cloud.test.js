@@ -582,3 +582,87 @@ test('справочники: динамические сорта и покуп�
   assert.ok(st.body.grades.includes('Экстра'));
   assert.ok(st.body.customers.some((x) => x.name === 'Хавас'));
 });
+
+test('контрагенты, оплаты, акт сверки и детализация ОПиУ', async () => {
+  await globalThis.__TEST_DB.query('DELETE FROM login_fails');
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const { cookie: dir } = await signIn('director-pass-2');
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Директор может создавать контрагента с типом и ИНН
+  const cpRes = await call(status, {
+    method: 'POST',
+    query: { resource: 'refs' },
+    body: { target: 'customer', name: 'Корзинка', kind: 'buyer', inn: '301234567', phone: '+998901234567' },
+    ...as(dir),
+  });
+  assert.equal(cpRes.code, 200);
+  assert.equal(cpRes.body.customer.kind, 'buyer');
+  assert.equal(cpRes.body.customer.inn, '301234567');
+
+  // Проведём продажу Корзинке на 500 000 сум (сначала приход, чтобы хватило остатка)
+  const inCmd = await call(command, {
+    method: 'POST',
+    body: { kind: 'intake', request_id: 'rec-in-1', payload: { grade: 'Высший', net_kg: 10 } },
+    ...as(admin),
+  });
+  assert.equal(inCmd.code, 200);
+  const saleCmd = await call(command, {
+    method: 'POST',
+    body: {
+      kind: 'sale',
+      request_id: 'rec-sale-1',
+      payload: { customer: 'Корзинка', items: [{ grade: 'Высший', net_kg: 5, price_per_kg: 100000, amount: 500000 }] },
+    },
+    ...as(admin),
+  });
+  assert.equal(saleCmd.code, 200);
+
+  // Оплата от Корзинки на 300 000 сум + ошибочная на 50 000 сум, которую отменим
+  const pay1 = await call(report, {
+    method: 'POST',
+    query: { resource: 'payments' },
+    body: { doc_date: today, counterparty: 'Корзинка', direction: 'in', amount: 300000, payment_method: 'transfer', comment: 'П/п 12' },
+    ...as(dir),
+  });
+  assert.equal(pay1.code, 200);
+  const pay2 = await call(report, {
+    method: 'POST',
+    query: { resource: 'payments' },
+    body: { doc_date: today, counterparty: 'Корзинка', direction: 'in', amount: 50000, payment_method: 'cash' },
+    ...as(dir),
+  });
+  assert.equal(pay2.code, 200);
+  const cancPay = await call(report, {
+    method: 'PATCH',
+    query: { resource: 'payments' },
+    body: { id: pay2.body.id, reason: 'Дубль' },
+    ...as(admin),
+  });
+  assert.equal(cancPay.code, 200);
+
+  // Сводка по контрагентам: Корзинка должна нам 500 000 - 300 000 = 200 000
+  const listRes = await call(report, { query: { resource: 'reconcile' }, ...as(dir) });
+  assert.equal(listRes.code, 200);
+  const korz = listRes.body.counterparties.find((c) => c.name === 'Корзинка');
+  assert.ok(korz);
+  assert.equal(korz.sales_total, 500000);
+  assert.equal(korz.paid_in, 300000);
+  assert.equal(korz.balance, 200000);
+
+  // Акт сверки по Корзинке за сегодня
+  const actRes = await call(report, { query: { resource: 'reconcile', counterparty: 'Корзинка', from: today, to: today }, ...as(dir) });
+  assert.equal(actRes.code, 200);
+  assert.equal(actRes.body.opening_balance, 0);
+  assert.equal(actRes.body.total_debit, 500000);
+  assert.equal(actRes.body.total_credit, 300000);
+  assert.equal(actRes.body.closing_balance, 200000);
+  assert.equal(actRes.body.docs.length, 2);
+
+  // Детализация ОПиУ возвращает expense_docs и loss_docs
+  const rep = await call(report, { query: { from: today, to: today }, ...as(dir) });
+  assert.equal(rep.code, 200);
+  assert.ok(Array.isArray(rep.body.expense_docs));
+  assert.ok(Array.isArray(rep.body.loss_docs));
+  assert.ok(rep.body.sales.some((s) => s.customer === 'Корзинка'));
+});

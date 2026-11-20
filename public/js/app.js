@@ -5,6 +5,7 @@ import { initReport, loadReport } from './report.js';
 import { initInvoice, openInvoice } from './invoice.js';
 import { initExpenses, loadExpenses } from './expenses.js';
 import { initRefs, loadRefs } from './refs.js';
+import { initCounterparties, loadCounterparties } from './counterparties.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -30,6 +31,7 @@ const ROUTES = [
   ['history', '/history', 'История', 'i-history', null, 'Склад'],
   ['report', '/report', 'Отчёт (ОПиУ)', 'i-report', ['director', 'admin'], 'Административное'],
   ['expenses', '/expenses', 'Расходы', 'i-exp', ['director', 'admin'], 'Административное'],
+  ['counterparties', '/counterparties', 'Контрагенты', 'i-cp', ['director', 'admin'], 'Административное'],
   ['refs', '/refs', 'Справочники', 'i-refs', ['admin'], 'Администрирование'],
   ['users', '/users', 'Сотрудники', 'i-users', ['admin'], 'Администрирование'],
   ['log', '/log', 'Журнал', 'i-log', ['admin'], 'Администрирование'],
@@ -216,6 +218,7 @@ function navigate(id, { push = true, replace = false } = {}) {
     state.opsTimer = setInterval(loadOps, 8000);
   }
   if (ridTab === 'expenses') loadExpenses();
+  if (ridTab === 'counterparties') loadCounterparties();
   if (ridTab === 'refs') loadRefs();
   if (ridTab === 'users') loadUsers();
   if (ridTab === 'log') loadLog();
@@ -255,7 +258,11 @@ function openPw(target) {
 /* ───── старт, статус и справочники ───── */
 function paintStatus(d) {
   if (Array.isArray(d.grades) && d.grades.length) state.grades = d.grades;
-  if (Array.isArray(d.customers)) state.customers = d.customers;
+  if (Array.isArray(d.customers)) {
+    state.customers = d.customers;
+    const dl = $('cp-datalist');
+    if (dl) dl.innerHTML = d.customers.map((c) => `<option value="${esc(c.name)}">`).join('');
+  }
   const dev = d.devices[0];
   if (!dev) {
     $('seen').textContent = 'нет данных';
@@ -647,6 +654,7 @@ $('refresh').onclick = async () => {
   if (state.tab === 'history') loadHistory();
   if (state.tab === 'queue') loadOps();
   if (state.tab === 'expenses') loadExpenses();
+  if (state.tab === 'counterparties') loadCounterparties();
   if (state.tab === 'refs') loadRefs();
   if (state.tab === 'users') loadUsers();
   if (state.tab === 'log') loadLog();
@@ -846,6 +854,16 @@ initExpenses({
   askText,
 });
 initRefs({
+  toast,
+  askText,
+  onRefsChanged: async () => {
+    const s = await api('GET', '/api/status');
+    if (s.ok) paintStatus(s.data);
+  },
+});
+initCounterparties({
+  cur: () => state.cur,
+  crop: () => state.crop,
   toast,
   askText,
   onRefsChanged: async () => {
