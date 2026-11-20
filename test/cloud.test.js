@@ -523,3 +523,42 @@ test('отчётная система: сводка, прошлый период
   assert.ok(String(csv.body).startsWith('\uFEFF'), 'есть UTF-8 BOM для Excel');
   assert.ok(String(csv.body).includes('Высший'), 'данные попали в CSV');
 });
+
+test('расходы: категории, акты расхода, права, отмена и чистая прибыль в отчёте', async () => {
+  await globalThis.__TEST_DB.query('DELETE FROM login_fails');
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const { cookie: dir } = await signIn('director-pass-2');
+  const expReq = (method, body, cookie, extraQ = {}) =>
+    call(report, { method, query: { resource: 'expenses', from: today, to: today, ...extraQ }, body, ...as(cookie) });
+
+  // Базовые категории созданы автоматически
+  const init = await expReq('GET', undefined, admin);
+  assert.equal(init.code, 200);
+  assert.ok(init.body.categories.some((c) => c.name === 'Зарплата'));
+
+  // Создание и дубликат категории (только админ)
+  assert.equal((await expReq('POST', { target: 'category', name: 'Аренда' }, dir)).code, 403, 'директор не создаёт категории');
+  const cat = await expReq('POST', { target: 'category', name: 'Аренда теплицы' }, admin);
+  assert.equal(cat.code, 200);
+  assert.equal((await expReq('POST', { target: 'category', name: 'аренда теплицы' }, admin)).code, 409, 'дубликат категории');
+
+  // Создание акта расхода (директор не может)
+  assert.equal((await expReq('POST', { target: 'expense', category_id: cat.body.category.id, amount: 100000 }, dir)).code, 403);
+  const act = await expReq('POST', {
+    target: 'expense', doc_date: today, category_id: cat.body.category.id, amount: 150000,
+    counterparty: 'АгроСнаб', payment_method: 'transfer', comment: 'Аванс',
+  }, admin);
+  assert.equal(act.code, 200);
+
+  // Отчёт учитывает расходы и чистую прибыль (выручка - расходы)
+  const rep1 = await call(report, { query: { from: today, to: today }, ...as(admin) });
+  assert.equal(rep1.body.summary.expenses_total, 150000);
+  assert.equal(rep1.body.summary.net_profit, Math.round((rep1.body.summary.amount - 150000) * 100) / 100);
+  assert.equal(rep1.body.by_expense_category[0].category, 'Аренда теплицы');
+
+  // Отмена акта обнуляет расход в отчёте
+  const canc = await expReq('PATCH', { target: 'expense', id: act.body.id, reason: 'Ошибочный акт' }, admin);
+  assert.equal(canc.code, 200);
+  const rep2 = await call(report, { query: { from: today, to: today }, ...as(admin) });
+  assert.equal(rep2.body.summary.expenses_total, 0);
+});

@@ -21,6 +21,7 @@
   <symbol id="i-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8Z M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
   <symbol id="i-wo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
   <symbol id="i-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1Z M8 5H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2 M9.5 13.5 11 15l3.5-3.5"/></symbol>
+  <symbol id="i-exp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16l-2.5-1.5L14 20l-2-1.5L10 20l-2.5-1.5L5 20V4Z M9 9h6 M9 13h4"/></symbol>
   <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1 M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7 M21 19v-1a4 4 0 0 0-3-3.9 M15 4.2a3.5 3.5 0 0 1 0 6.6"/></symbol>
   <symbol id="i-log" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z M14 3v5h5 M9 13h6 M9 17h6"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14 M5 12h14"/></symbol>
@@ -176,6 +177,32 @@
       <div class="card"><div id="ops-list"></div></div>
     </section>
 
+    <section id="p-expenses" hidden>
+      <div class="page-head">
+        <div>
+          <h1 class="page">Расходы</h1>
+          <p class="sub">Акты расхода по проекту (ЗП, удобрения, тара, доставка) и категории</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sec" id="e-open-cats" hidden>Категории</button>
+          <button class="btn" id="e-open-add" hidden><svg><use href="#i-plus"/></svg>Акт расхода</button>
+        </div>
+      </div>
+      <div class="hero">
+        <div class="lbl">Расходы за период</div>
+        <div class="num"><span id="e-total">0</span><small id="e-cur">сум</small></div>
+        <div class="small muted" id="e-count" style="margin-top:6px"></div>
+      </div>
+      <div class="card filters">
+        <div class="chips">
+          <button class="chip" data-erange="month">Этот месяц</button><button class="chip" data-erange="prevmonth">Прошлый месяц</button><button class="chip" data-erange="today">Сегодня</button>
+        </div>
+        <div class="daterow"><input type="date" id="e-from" aria-label="С даты"><input type="date" id="e-to" aria-label="По дату"></div>
+        <select id="e-cat-filter" aria-label="Категория"><option value="">Все категории</option></select>
+      </div>
+      <div class="card"><div id="e-rows"></div></div>
+    </section>
+
     <section id="p-users" hidden>
       <div class="page-head">
         <div>
@@ -255,6 +282,40 @@
     <button class="btn sec" id="inv-png">Картинка PNG</button>
     <button class="btn" id="inv-print">Печать / PDF</button>
   </div>
+</dialog>
+
+<dialog id="exp-dlg">
+  <h3>Новый акт расхода</h3>
+  <div class="stack">
+    <div class="daterow">
+      <div><label class="f" for="exp-date">Дата акта</label><input id="exp-date" type="date"></div>
+      <div><label class="f" for="exp-amt">Сумма</label><input id="exp-amt" type="number" inputmode="decimal" min="0" placeholder="0"></div>
+    </div>
+    <div><label class="f" for="exp-cat">Категория расхода</label><select id="exp-cat"></select></div>
+    <div>
+      <label class="f">Способ оплаты</label>
+      <div class="chips" id="exp-pay-chips">
+        <button class="chip sel" type="button" data-pm="cash">Наличные</button>
+        <button class="chip" type="button" data-pm="card">Карта</button>
+        <button class="chip" type="button" data-pm="transfer">Перечисление</button>
+      </div>
+    </div>
+    <div><label class="f" for="exp-cp">Кому / Поставщик (необязательно)</label><input id="exp-cp" placeholder="Имя сотрудника или название компании"></div>
+    <div><label class="f" for="exp-comment">Назначение / Комментарий</label><input id="exp-comment" placeholder="За что расход, номер чека/акта..."></div>
+  </div>
+  <div class="err" id="exp-err" style="margin-top:10px"></div>
+  <div class="acts" style="justify-content:flex-end"><button class="btn sec" id="exp-cancel">Отмена</button><button class="btn" id="exp-save">Провести акт</button></div>
+</dialog>
+
+<dialog id="exp-cat-dlg">
+  <h3>Категории расходов</h3>
+  <div class="wrow" style="margin-bottom:14px">
+    <input id="exp-cat-new" placeholder="Новая категория (напр. Упаковка)">
+    <button class="btn" id="exp-cat-add">Добавить</button>
+  </div>
+  <div class="err" id="exp-cat-err" style="margin:-6px 0 8px"></div>
+  <ul class="list" id="exp-cat-list" style="max-height:46vh;overflow-y:auto"></ul>
+  <div class="acts" style="justify-content:flex-end;margin-top:14px"><button class="btn sec" id="exp-cat-close">Закрыть</button></div>
 </dialog>
 
 <div id="print-root"></div>

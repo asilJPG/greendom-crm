@@ -97,12 +97,33 @@ function renderSummary(d) {
       <div class="r">${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></div>
     </li>`).join('');
 
+  const expRows = (d.by_expense_category || []).map((x) => `
+    <li class="li">
+      <div class="l">
+        <div class="t">${esc(x.category)} <span class="small muted" style="font-weight:500">${x.share_pct}%</span></div>
+        <div class="s">актов: ${x.acts}</div>
+        <div class="prog"><span style="width:${Math.min(100, x.share_pct)}%"></span></div>
+      </div>
+      <div class="r">${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></div>
+    </li>`).join('');
+
+  const profitNeg = (s.net_profit || 0) < 0;
   return `
     <div class="kpis kpis4">
       <div class="kpi">
         <div class="k">Выручка ${deltaBadge(s.amount, p.amount)}</div>
         <div class="v">${money(s.amount)} <small>${esc(cur)}</small></div>
         <div class="subk">пред. период: ${money(p.amount)}</div>
+      </div>
+      <div class="kpi">
+        <div class="k">Расходы ${deltaBadge(s.expenses_total, p.expenses_total, true)}</div>
+        <div class="v">${money(s.expenses_total)} <small>${esc(cur)}</small></div>
+        <div class="subk">пред. период: ${money(p.expenses_total)}</div>
+      </div>
+      <div class="kpi">
+        <div class="k">Чистая прибыль ${deltaBadge(s.net_profit, p.net_profit)}</div>
+        <div class="v" style="${profitNeg ? 'color:var(--red)' : ''}">${money(s.net_profit)} <small>${esc(cur)}</small></div>
+        <div class="subk">выручка − расходы</div>
       </div>
       <div class="kpi">
         <div class="k">Продано ${deltaBadge(s.out_kg, p.out_kg)}</div>
@@ -129,7 +150,8 @@ function renderSummary(d) {
       <h2>По сортам</h2>
       ${stackBar}
       ${gradeRows ? `<ul class="list">${gradeRows}</ul>` : '<div class="empty">Нет данных за период</div>'}
-    </div>`;
+    </div>
+    ${expRows ? `<div class="card"><h2>Расходы по категориям</h2><ul class="list">${expRows}</ul></div>` : ''}`;
 }
 
 function renderDays(d) {

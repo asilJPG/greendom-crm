@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const { handler, dateRange } = require('../lib/http');
+const { handleExpenses } = require('../lib/expenses');
 
 const R3 = (e) => `ROUND(${e}::numeric,3)::float8`;
 const R2 = (e) => `ROUND(${e}::numeric,2)::float8`;
@@ -21,6 +22,9 @@ function csvCell(v) {
 }
 
 module.exports = handler(async (req, res) => {
+  if (req.query.resource === 'expenses') return handleExpenses(req, res);
+  if (req.method !== 'GET') return res.status(405).json({ error: 'только GET' });
+
   const [from, to] = dateRange(req.query.from, req.query.to);
   const [pFrom, pTo] = prevPeriod(from, to);
   const grade = String(req.query.grade || '').trim();
@@ -69,7 +73,7 @@ module.exports = handler(async (req, res) => {
   const prevW = makeWhere(1);
   const pp = [pFrom, pTo, ...prevW.extra];
 
-  const [by_grade, by_day, by_worker, by_customer, [manual], [cancelled], [prevRow], saleRows, filterGrades, filterCustomers] = await Promise.all([
+  const [by_grade, by_day, by_worker, by_customer, [manual], [cancelled], [prevRow], saleRows, filterGrades, filterCustomers, expByCat, [prevExpRow]] = await Promise.all([
     query(
       `SELECT grade,
          ${R3(`SUM(CASE WHEN type='in' THEN net_kg ELSE 0 END)`)} AS in_kg,
@@ -107,6 +111,18 @@ module.exports = handler(async (req, res) => {
        FROM movements WHERE type='out' AND ${curW.sql} ORDER BY ts DESC, id DESC LIMIT 300`, p),
     query(`SELECT DISTINCT grade FROM movements ORDER BY grade`),
     query(`SELECT DISTINCT customer FROM movements WHERE customer IS NOT NULL AND customer <> '' ORDER BY customer`),
+    query(
+      `SELECT c.name AS category, count(*)::int AS acts, ${R2('COALESCE(SUM(e.amount),0)')} AS amount
+       FROM expenses e JOIN expense_categories c ON c.id=e.category_id
+       WHERE e.status='active' AND e.doc_date BETWEEN $1::date AND $2::date
+       GROUP BY c.name ORDER BY amount DESC`,
+      [from, to]
+    ),
+    query(
+      `SELECT ${R2('COALESCE(SUM(amount),0)')} AS amount FROM expenses
+       WHERE status='active' AND doc_date BETWEEN $1::date AND $2::date`,
+      [pFrom, pTo]
+    ),
   ]);
 
   const totalIn = r3(by_grade.reduce((a, x) => a + x.in_kg, 0));
@@ -164,6 +180,14 @@ module.exports = handler(async (req, res) => {
   const pWo = Number(prevRow?.writeoff_kg || 0);
   const pBrak = Number(prevRow?.brak_kg || 0);
   const pAmt = Number(prevRow?.amount || 0);
+  const expensesTotal = r2(expByCat.reduce((a, x) => a + Number(x.amount || 0), 0));
+  const pExp = Number(prevExpRow?.amount || 0);
+  const netProfit = r2(totalAmt - expensesTotal);
+  const pProfit = r2(pAmt - pExp);
+  const by_expense_category = expByCat.map((x) => ({
+    ...x,
+    share_pct: expensesTotal > 0 ? Math.round((Number(x.amount) / expensesTotal) * 1000) / 10 : 0,
+  }));
 
   res.status(200).json({
     from,
@@ -176,6 +200,8 @@ module.exports = handler(async (req, res) => {
       loss_kg: lossKg,
       loss_pct: lossPct,
       amount: totalAmt,
+      expenses_total: expensesTotal,
+      net_profit: netProfit,
       avg_price: totalOut > 0 ? r2(totalAmt / totalOut) : null,
       sales_count: sales.length,
     },
@@ -187,12 +213,15 @@ module.exports = handler(async (req, res) => {
       writeoff_kg: pWo,
       loss_kg: r3(pWo + pBrak),
       amount: pAmt,
+      expenses_total: pExp,
+      net_profit: pProfit,
       avg_price: pOut > 0 ? r2(pAmt / pOut) : null,
     },
     by_grade: enrichedGrades,
     by_day,
     by_worker: enrichedWorkers,
     by_customer: enrichedCustomers,
+    by_expense_category,
     sales,
     filters: {
       grades: filterGrades.map((r) => r.grade),
@@ -201,4 +230,4 @@ module.exports = handler(async (req, res) => {
     manual_entries: manual.n,
     cancelled_entries: cancelled.n,
   });
-});
+}, { method: ['GET', 'POST', 'PATCH'] });

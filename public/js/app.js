@@ -3,6 +3,7 @@ import { initScale, autoConnectScale } from './scale.js';
 import { isPasskeySupported, registerPasskey, loginWithPasskey } from './passkey.js';
 import { initReport, loadReport } from './report.js';
 import { initInvoice, openInvoice } from './invoice.js';
+import { initExpenses, loadExpenses } from './expenses.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -27,6 +28,7 @@ const ROUTES = [
   ['intake', '/intake', 'Приход', 'i-in', ['keeper', 'admin'], 'Работа'],
   ['sale', '/sale', 'Продажа', 'i-out', ['keeper', 'admin'], 'Работа'],
   ['writeoff', '/writeoff', 'Списание', 'i-wo', ['keeper', 'admin'], 'Работа'],
+  ['expenses', '/expenses', 'Расходы', 'i-exp', null, 'Работа'],
   ['queue', '/queue', 'Очередь', 'i-queue', ['keeper', 'admin'], 'Работа'],
   ['users', '/users', 'Сотрудники', 'i-users', ['admin'], 'Администрирование'],
   ['log', '/log', 'Журнал', 'i-log', ['admin'], 'Администрирование'],
@@ -204,6 +206,7 @@ function navigate(id, { push = true, replace = false } = {}) {
     loadOps();
     state.opsTimer = setInterval(loadOps, 8000);
   }
+  if (ridTab === 'expenses') loadExpenses();
   if (ridTab === 'users') loadUsers();
   if (ridTab === 'log') loadLog();
 }
@@ -592,6 +595,7 @@ $('refresh').onclick = async () => {
   if (state.tab === 'report') loadReport();
   if (state.tab === 'history') loadHistory();
   if (state.tab === 'queue') loadOps();
+  if (state.tab === 'expenses') loadExpenses();
   if (state.tab === 'users') loadUsers();
   if (state.tab === 'log') loadLog();
   toast('Обновлено');
@@ -737,5 +741,11 @@ initReport({
   crop: () => state.crop,
   gradeColor,
   openHistoryDay: (day) => { $('h-day').value = day; navigate('history'); },
+});
+initExpenses({
+  me: () => state.me,
+  cur: () => state.cur,
+  toast,
+  askText,
 });
 start();
