@@ -243,6 +243,19 @@ function openActViewPage(x) {
   showExpView('view');
 }
 
+export async function openExpenseById(id) {
+  let found = loadedItems.find((a) => String(a.id) === String(id));
+  if (!found) {
+    const r = await api('GET', '/api/report?resource=expenses&all=1');
+    if (r.ok) {
+      categories = r.data.categories || categories;
+      renderCategoriesSelects();
+      found = (r.data.items || []).find((a) => String(a.id) === String(id));
+    }
+  }
+  if (found) openActViewPage(found);
+}
+
 export async function loadExpenses() {
   showExpView('list');
   setDefaultPeriod();

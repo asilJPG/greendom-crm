@@ -11,7 +11,7 @@ const dm = (s) => s.slice(8, 10) + '.' + s.slice(5, 7);
 let lastData = null;
 let subTab = 'pnl'; // pnl | days | buyers
 let chartMetric = 'amount'; // amount | out_kg | in_kg
-let deps = { cur: () => 'сум', crop: () => 'Клубника', gradeColor: () => '#1b1b1b', openHistoryDay: () => {} };
+let deps = { cur: () => 'сум', crop: () => 'Клубника', gradeColor: () => '#1b1b1b', openHistoryDay: () => {}, openExpenseAct: () => {} };
 
 function deltaBadge(cur, prev, invert = false) {
   if (!prev || prev === 0) return '';
@@ -272,12 +272,12 @@ function openDrill(kind, key, d) {
     sub += ` · актов: ${list.length} · −${money(sum)} ${cur}`;
     html = list.length ? `<ul class="list">${list.map((e) => {
       const meta = [dm(e.doc_date), esc(e.category), PAY_LABEL[e.payment_method] || e.payment_method, e.counterparty ? esc(e.counterparty) : '', e.user_name ? esc(e.user_name) : ''].filter(Boolean).join(' · ');
-      return `<li class="li">
+      return `<li class="li click-row" data-drill-exp="${e.id}">
         <div class="l">
           <div class="t">Акт №${e.id}${e.comment ? ' · ' + esc(e.comment) : ''}</div>
           <div class="s">${meta}</div>
         </div>
-        <div class="r"><b>−${money(e.amount)} ${esc(cur)}</b></div>
+        <div class="r" style="display:flex;align-items:center;gap:6px;flex:none"><b>−${money(e.amount)} ${esc(cur)}</b><span class="pnl-arr">›</span></div>
       </li>`;
     }).join('')}</ul>` : '<div class="empty">Актов расхода за период нет</div>';
   } else if (kind === 'loss') {
@@ -305,6 +305,9 @@ function openDrill(kind, key, d) {
       const s = salesIndex[b.dataset.drillInv];
       if (s) openInvoice(s, { crop: deps.crop(), cur: deps.cur() });
     };
+  });
+  $('drill-body').querySelectorAll('[data-drill-exp]').forEach((el) => {
+    el.onclick = () => deps.openExpenseAct(Number(el.dataset.drillExp));
   });
   showReportView('drill');
 }

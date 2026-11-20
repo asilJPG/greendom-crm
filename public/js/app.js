@@ -3,7 +3,7 @@ import { initScale, autoConnectScale, getActiveWeightKg, clearManualWeight, rend
 import { isPasskeySupported, registerPasskey, loginWithPasskey } from './passkey.js';
 import { initReport, loadReport } from './report.js';
 import { initInvoice, openInvoice } from './invoice.js';
-import { initExpenses, loadExpenses } from './expenses.js';
+import { initExpenses, loadExpenses, openExpenseById } from './expenses.js';
 import { initRefs, loadRefs } from './refs.js';
 import { initCounterparties, loadCounterparties } from './counterparties.js';
 import { initInvestments, loadInvestments } from './investments.js';
@@ -919,6 +919,10 @@ initReport({
   crop: () => state.crop,
   gradeColor,
   openHistoryDay: (day) => { $('h-day').value = day; navigate('history'); },
+  openExpenseAct: async (id) => {
+    navigate('expenses');
+    await openExpenseById(id);
+  },
 });
 initExpenses({
   me: () => state.me,
