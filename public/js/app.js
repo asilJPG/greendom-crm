@@ -1,5 +1,6 @@
 import { api, rawCall, errMsg, configureAuthHandlers } from './api.js';
 import { initScale, autoConnectScale } from './scale.js';
+import { isPasskeySupported, registerPasskey, loginWithPasskey } from './passkey.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -534,10 +535,59 @@ $('fc-go').onclick = async () => {
   await start();
 };
 
-$('menu').onclick = () => { $('md-name').textContent = state.me.name; $('md-role').textContent = ROLE_NAME[state.me.role] || state.me.role; $('menu-dlg').showModal(); };
+$('menu').onclick = () => { $('md-name').textContent = state.me.name; $('md-role').textContent = ROLE_NAME[state.me.role] || state.me.role; $('menu-dlg').showModal(); loadPasskeys(); };
 $('md-close').onclick = () => $('menu-dlg').close();
 $('md-out').onclick = () => { $('menu-dlg').close(); logout(); };
 $('md-pw').onclick = () => { $('menu-dlg').close(); openPw(null); };
+
+async function loadPasskeys() {
+  const box = $('md-pk-list');
+  const r = await api('GET', '/api/passkey');
+  if (!r.ok || !r.data.length) { box.innerHTML = ''; return; }
+  box.innerHTML = r.data.map((p) =>
+    `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)">` +
+    `<span>${esc(p.device_name)} · ${esc(p.created_at.slice(5))}</span>` +
+    `<button class="btn sec sm" data-del-pk="${esc(p.id)}">Удалить</button></div>`
+  ).join('');
+  box.querySelectorAll('[data-del-pk]').forEach((b) => (b.onclick = async () => {
+    const r2 = await api('DELETE', '/api/passkey', { id: b.dataset.delPk });
+    toast(r2.ok ? 'Face ID отключён' : errMsg(r2), !r2.ok);
+    loadPasskeys();
+  }));
+}
+
+$('md-pk').onclick = async () => {
+  const b = $('md-pk');
+  b.disabled = true;
+  try {
+    await registerPasskey();
+    toast('Face ID подключён');
+    loadPasskeys();
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') toast(e.message || 'Не удалось подключить Face ID', true);
+  } finally {
+    b.disabled = false;
+  }
+};
+
+$('lg-pk').onclick = async () => {
+  const b = $('lg-pk');
+  b.disabled = true;
+  $('lg-err').textContent = '';
+  try {
+    await loginWithPasskey();
+    await start();
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') $('lg-err').textContent = e.message || 'Не удалось войти по Face ID';
+  } finally {
+    b.disabled = false;
+  }
+};
+
+isPasskeySupported().then((ok) => {
+  $('lg-pk').hidden = !ok;
+  $('md-pk').hidden = !ok;
+});
 $('pd-cancel').onclick = () => $('pw-dlg').close();
 $('pd-ok').onclick = async () => {
   const r = state.pwTarget

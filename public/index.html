@@ -27,6 +27,7 @@
   <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16 M4 12h16 M4 17h16"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12 M18 6 6 18"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 6 M20 4v7h-7"/></symbol>
+  <symbol id="i-faceid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2 M16 4h2a2 2 0 0 1 2 2v2 M20 16v2a2 2 0 0 1-2 2h-2 M8 20H6a2 2 0 0 1-2-2v-2 M9 9v1.5 M15 9v1.5 M12 9v3.5h-1 M9 15.5c.8 1 1.8 1.5 3 1.5s2.2-.5 3-1.5"/></symbol>
   <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l5-5-5-5 M20 12H9 M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/></symbol>
 </svg>
 
@@ -35,6 +36,7 @@
   <div class="card">
     <div class="field"><label class="f" for="lg-pw">Пароль</label><input id="lg-pw" type="password" autocomplete="current-password" autofocus></div>
     <button class="btn block" id="lg-go">Войти</button>
+    <button class="btn sec block" id="lg-pk" hidden style="margin-top:8px"><svg><use href="#i-faceid"/></svg>Войти по Face ID</button>
     <div class="err" id="lg-err" style="margin-top:10px"></div>
   </div>
 </div>
@@ -200,7 +202,13 @@
 <dialog id="menu-dlg">
   <h3 id="md-name">Пользователь</h3>
   <div class="muted" id="md-role" style="margin:-10px 0 16px"></div>
-  <div class="stack"><button class="btn sec block" id="md-pw">Сменить пароль</button><button class="btn block" id="md-out">Выйти</button><button class="btn sec block" id="md-close">Закрыть</button></div>
+  <div class="stack">
+    <button class="btn sec block" id="md-pk" hidden><svg><use href="#i-faceid"/></svg>Подключить Face ID</button>
+    <div id="md-pk-list" class="small muted"></div>
+    <button class="btn sec block" id="md-pw">Сменить пароль</button>
+    <button class="btn block" id="md-out">Выйти</button>
+    <button class="btn sec block" id="md-close">Закрыть</button>
+  </div>
 </dialog>
 
 <dialog id="pw-dlg">

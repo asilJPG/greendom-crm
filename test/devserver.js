@@ -27,7 +27,11 @@ http
       req.query = Object.fromEntries(url.searchParams);
       try { req.body = raw ? JSON.parse(raw) : {}; } catch { req.body = {}; }
       const setHeader = res.setHeader.bind(res);
-      res.setHeader = (k, v) => setHeader(k, k.toLowerCase() === 'set-cookie' ? String(v).replace('; Secure', '') : v);
+      res.setHeader = (k, v) => {
+        if (k.toLowerCase() !== 'set-cookie') return setHeader(k, v);
+        const strip = (s) => String(s).replace('; Secure', '');
+        return setHeader(k, Array.isArray(v) ? v.map(strip) : strip(v));
+      };
       res.status = (c) => { res.statusCode = c; return res; };
       res.json = (o) => { res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.end(JSON.stringify(o)); return res; };
       const fn = routes[url.pathname];

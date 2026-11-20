@@ -23,6 +23,7 @@ const report = require('../api/report');
 const movements = require('../api/movements');
 const status = require('../api/status');
 const command = require('../api/command');
+const passkey = require('../api/passkey');
 const { todayStr } = require('../lib/http');
 
 const OWNER_PW = '4711-test'; // вымышленные данные; настоящие пароли в тестах не используются
@@ -423,4 +424,80 @@ test('операции с сайта: мгновенное применение,
     headers: { cookie: admin, host: 'sklad-urozhay.vercel.app', origin: 'https://evil.example' },
   });
   assert.equal(csrf.code, 403, 'чужой Origin отклонён');
+});
+
+test('Face ID / Passkey: регистрация, вход с проверкой ECDSA-подписи, отказ при подделке и отключении', async () => {
+  const crypto = require('crypto');
+  await globalThis.__TEST_DB.query('DELETE FROM login_fails');
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const host = 'sklad-urozhay.vercel.app';
+  const origin = `https://${host}`;
+  const rpHash = crypto.createHash('sha256').update(host).digest();
+  const makeAuthData = (counter, flags = 0x05) => {
+    const b = Buffer.alloc(37);
+    rpHash.copy(b, 0);
+    b[32] = flags; // UP(0x01) + UV(0x04)
+    b.writeUInt32BE(counter, 33);
+    return b;
+  };
+  const cookieHeader = (res) => {
+    const sc = res.headers['Set-Cookie'];
+    return Array.isArray(sc) ? sc.map((s) => s.split(';')[0]).join('; ') : String(sc || '').split(';')[0];
+  };
+
+  // 1. Получение опций регистрации
+  const regOpt = await call(passkey, { method: 'POST', body: { action: 'reg_options' }, headers: { cookie: admin, host } });
+  assert.equal(regOpt.code, 200);
+  const chCookie = cookieHeader(regOpt);
+
+  // 2. Генерация настоящей пары ECDSA P-256 (как в Face ID / Secure Enclave)
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const spki = publicKey.export({ format: 'der', type: 'spki' }).toString('base64url');
+  const credId = crypto.randomBytes(16).toString('base64url');
+  const regClientData = Buffer.from(JSON.stringify({ type: 'webauthn.create', challenge: regOpt.body.challenge, origin })).toString('base64url');
+
+  const regVer = await call(passkey, {
+    method: 'POST',
+    body: { action: 'reg_verify', id: credId, clientDataJSON: regClientData, authenticatorData: makeAuthData(1).toString('base64url'), publicKey: spki, alg: -7, device_name: 'iPhone Test' },
+    headers: { cookie: `${admin}; ${chCookie}`, host },
+  });
+  assert.equal(regVer.code, 200, JSON.stringify(regVer.body));
+
+  // Список ключей пользователя
+  const list = await call(passkey, { method: 'GET', headers: { cookie: admin, host } });
+  assert.equal(list.code, 200);
+  assert.equal(list.body.length, 1);
+  assert.equal(list.body[0].device_name, 'iPhone Test');
+
+  // 3. Вход по Face ID с настоящей подписью
+  const authOpt = await call(passkey, { method: 'POST', body: { action: 'auth_options' }, headers: { host } });
+  assert.equal(authOpt.code, 200);
+  const authChCookie = cookieHeader(authOpt);
+  const authClientBuf = Buffer.from(JSON.stringify({ type: 'webauthn.get', challenge: authOpt.body.challenge, origin }));
+  const authDataBuf = makeAuthData(2);
+  const signedData = Buffer.concat([authDataBuf, crypto.createHash('sha256').update(authClientBuf).digest()]);
+  const sig = crypto.sign('sha256', signedData, privateKey).toString('base64url');
+
+  const authOk = await call(passkey, {
+    method: 'POST',
+    body: { action: 'auth_verify', id: credId, clientDataJSON: authClientBuf.toString('base64url'), authenticatorData: authDataBuf.toString('base64url'), signature: sig },
+    headers: { cookie: authChCookie, host },
+  });
+  assert.equal(authOk.code, 200, JSON.stringify(authOk.body));
+  const newSession = Array.isArray(authOk.headers['Set-Cookie']) ? authOk.headers['Set-Cookie'][0].split(';')[0] : cookieOf(authOk);
+  assert.equal((await call(stock, as(newSession))).code, 200, 'сессия после Face ID открывает данные');
+
+  // 4. Поддельная подпись отклоняется
+  const authOpt2 = await call(passkey, { method: 'POST', body: { action: 'auth_options' }, headers: { host } });
+  const bad = await call(passkey, {
+    method: 'POST',
+    body: { action: 'auth_verify', id: credId, clientDataJSON: Buffer.from(JSON.stringify({ type: 'webauthn.get', challenge: authOpt2.body.challenge, origin })).toString('base64url'), authenticatorData: makeAuthData(3).toString('base64url'), signature: Buffer.from('fake').toString('base64url') },
+    headers: { cookie: cookieHeader(authOpt2), host },
+  });
+  assert.equal(bad.code, 401, 'поддельная подпись не проходит');
+
+  // 5. Удаление ключа
+  const del = await call(passkey, { method: 'DELETE', body: { id: credId }, headers: { cookie: admin, host } });
+  assert.equal(del.code, 200);
+  assert.equal((await call(passkey, { method: 'GET', headers: { cookie: admin, host } })).body.length, 0);
 });
