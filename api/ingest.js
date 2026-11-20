@@ -51,6 +51,17 @@ module.exports = async (req, res) => {
     const rows = list.map(cleanMovement);
 
     await ensureSchema();
+    // Сначала фиксируем ответы моноблока на операции с сайта (повтор безопасен: меняем только незавершённые).
+    // Это важно сделать ДО записи movements: подтверждённая команда снимает защиту с этой строки.
+    const acks = Array.isArray(b.acks) ? b.acks.slice(0, 100) : [];
+    for (const a of acks) {
+      if (!Number.isInteger(a.id) || !['applied', 'rejected'].includes(a.status)) continue;
+      await query(
+        `UPDATE commands SET status=$1, result=$2, done_ts=now() WHERE id=$3 AND device=$4 AND status IN ('pending','expired')`,
+        [a.status, String(a.result || '').slice(0, 300), a.id, device]
+      );
+    }
+
     if (rows.length) {
       await query(
         `INSERT INTO movements (device,id,ts,type,grade,gross_kg,tare_kg,net_kg,manual,worker,note,sale_id,customer,
@@ -66,7 +77,13 @@ module.exports = async (req, res) => {
               net_kg=EXCLUDED.net_kg, manual=EXCLUDED.manual, worker=EXCLUDED.worker, note=EXCLUDED.note,
               sale_id=EXCLUDED.sale_id, customer=EXCLUDED.customer, price_per_kg=EXCLUDED.price_per_kg,
               amount=EXCLUDED.amount, user_name=EXCLUDED.user_name, status=EXCLUDED.status,
-              cancel_reason=EXCLUDED.cancel_reason, cancelled_ts=EXCLUDED.cancelled_ts, updated_at=now()`,
+              cancel_reason=EXCLUDED.cancel_reason, cancelled_ts=EXCLUDED.cancelled_ts, updated_at=now()
+         WHERE NOT EXISTS (
+              SELECT 1 FROM commands c
+              WHERE c.device = movements.device AND c.status = 'pending'
+                AND ((c.kind IN ('edit','cancel_movement') AND (c.payload->>'id')::int = movements.id)
+                  OR (c.kind = 'cancel_sale' AND movements.sale_id IS NOT NULL AND (c.payload->>'id')::int = movements.sale_id))
+         )`,
         [device, JSON.stringify(rows)]
       );
     }
@@ -83,18 +100,9 @@ module.exports = async (req, res) => {
       ]
     );
 
-    // ответы моноблока на операции с сайта (повтор безопасен: меняем только ещё не завершённые)
-    const acks = Array.isArray(b.acks) ? b.acks.slice(0, 100) : [];
-    for (const a of acks) {
-      if (!Number.isInteger(a.id) || !['applied', 'rejected'].includes(a.status)) continue;
-      await query(
-        `UPDATE commands SET status=$1, result=$2, done_ts=now() WHERE id=$3 AND device=$4 AND status IN ('pending','expired')`,
-        [a.status, String(a.result || '').slice(0, 300), a.id, device]
-      );
-    }
-    // операции, которые ждут выполнения; к сроку давности (сутки) операция больше не выполняется
-    await query(`UPDATE commands SET status='expired', result='не выполнена за сутки: моноблок не был на связи', done_ts=now()
-                 WHERE device=$1 AND status='pending' AND ts < now() - interval '24 hours'`, [device]);
+    // операции, которые ждут синхронизации с моноблоком; просрочка только через 30 дней
+    await query(`UPDATE commands SET status='expired', result='не синхронизирована за 30 дней: моноблок не выходил на связь', done_ts=now()
+                 WHERE device=$1 AND status='pending' AND ts < now() - interval '30 days'`, [device]);
     const commands = await query(
       `SELECT id, kind, payload, user_name, user_role FROM commands WHERE device=$1 AND status='pending' ORDER BY id LIMIT 20`,
       [device]

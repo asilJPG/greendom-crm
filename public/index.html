@@ -36,6 +36,15 @@
   .muted { color:var(--mut); } .small { font-size:13px; }
   h1.page { font-size:26px; font-weight:700; letter-spacing:-.02em; margin:0 0 4px; line-height:1.2; color:var(--ink); }
   .sub { color:var(--ink2); font-size:14px; margin:0 0 20px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+  .page-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; padding-bottom:16px; margin-bottom:20px; border-bottom:1px solid var(--line); }
+  .page-head .sub { margin:0; padding:0; border:0; max-width:52ch; }
+  .page-head .btn { flex:none; }
+  details.scale-card { padding:14px 18px; }
+  details.scale-card summary { list-style:none; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; font-weight:600; font-size:14.5px; color:var(--ink); }
+  details.scale-card summary::-webkit-details-marker { display:none; }
+  details.scale-card[open] summary { margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--line); }
+  .nav-badge { margin-left:auto; padding:1px 7px; border-radius:9999px; background:var(--amb-bg); color:var(--amb); font-size:11.5px; font-weight:600; }
+  .b-active { background:#198100; color:#ffffff; }
 
   .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:42px; padding:9px 16px; border-radius:10px; border:0; background:var(--btn); color:#fff; font-weight:500; font-size:14.5px; transition:background .12s, transform .06s; }
   .btn:hover { background:var(--btn-d); }
@@ -164,7 +173,7 @@
     .topbar { background:var(--bg); padding:0 28px 0 calc(var(--dw) + 28px); height:52px; }
     .topbar .brand { display:none; }
     main { margin-left:var(--dw); padding:24px 32px 48px; max-width:none; }
-    main > section { max-width:920px; margin:0 auto; }
+    main > section, #ops-shared { max-width:920px; margin:0 auto; }
     h1.page { font-size:28px; }
   }
 </style>
@@ -175,8 +184,13 @@
   <symbol id="i-stock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z M3.5 7.5 12 12l8.5-4.5 M12 12v9"/></symbol>
   <symbol id="i-report" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11 M10 20V5 M16 20v-7 M22 20H2"/></symbol>
   <symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v5l3 2 M3 12a9 9 0 1 0 3-6.7 M3 4v4h4"/></symbol>
-  <symbol id="i-ops" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1Z M8 5H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2 M9.5 13.5 11 15l3.5-3.5"/></symbol>
+  <symbol id="i-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12 M7.5 10.5 12 15l4.5-4.5 M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8Z M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+  <symbol id="i-wo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1Z M8 5H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2 M9.5 13.5 11 15l3.5-3.5"/></symbol>
   <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1 M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7 M21 19v-1a4 4 0 0 0-3-3.9 M15 4.2a3.5 3.5 0 0 1 0 6.6"/></symbol>
+  <symbol id="i-log" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z M14 3v5h5 M9 13h6 M9 17h6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14 M5 12h14"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16 M4 12h16 M4 17h16"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12 M18 6 6 18"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 6 M20 4v7h-7"/></symbol>
@@ -262,27 +276,22 @@
       <div class="card"><div id="h-rows"></div></div>
     </section>
 
-    <section id="p-ops" hidden>
-      <h1 class="page">Операции</h1>
-      <p class="sub">Приход, продажа и списание. Операция уходит на склад и выполняется там.</p>
-      <div class="banner" id="ops-stale" hidden></div>
-      <div class="card"><div class="chips" id="op-kinds"><button class="chip sel" data-k="intake">Приход</button><button class="chip" data-k="sale">Продажа</button><button class="chip" data-k="writeoff">Списание</button></div></div>
-      <div class="card" id="scale-card"><h2>Весы</h2>
-        <div class="small muted" id="scale-state"></div>
-        <div class="acts"><button class="btn sec sm" id="sc-conn">Подключить весы</button><button class="btn sec sm" id="sc-off" hidden>Отключить</button></div>
-        <div style="margin-top:12px"><label class="f" for="tare-g">Вес пустого ящика, г (вычитается при чтении с весов)</label><input id="tare-g" type="number" inputmode="decimal" min="0" value="0"></div>
-        <div class="small muted" style="margin-top:10px">Вес, введённый на сайте или считанный через браузер, записывается как ручной: программа на складе не может проверить, что число с весов.</div>
-      </div>
-
-      <div class="card stack" id="f-intake"><h2>Приход</h2>
+    <section id="p-intake" hidden>
+      <h1 class="page">Приход</h1>
+      <p class="sub">Запись поступления на склад — сразу обновляет остатки на сайте.</p>
+      <div class="card stack" id="f-intake">
         <div><label class="f" for="in-grade">Сорт</label><select id="in-grade"></select></div>
         <div><label class="f" for="in-kg">Вес нетто, кг</label><div class="wrow"><input id="in-kg" type="number" inputmode="decimal" step="0.001" min="0"><button class="btn sec sm sc-read" data-t="in-kg">С весов</button></div></div>
         <input id="in-worker" placeholder="Кто собрал (необязательно)">
         <input id="in-note" placeholder="Заметка (необязательно)">
         <button class="btn block" id="in-go">Записать приход</button>
       </div>
+    </section>
 
-      <div class="card" id="f-sale" hidden><h2>Продажа</h2>
+    <section id="p-sale" hidden>
+      <h1 class="page">Продажа</h1>
+      <p class="sub">Оформление отгрузки покупателю — сразу проверяет остаток и обновляет сайт.</p>
+      <div class="card" id="f-sale">
         <div class="field"><label class="f" for="sl-cust">Покупатель</label><input id="sl-cust" placeholder="Название или имя"></div>
         <div id="sl-items"></div>
         <button class="btn sec block" id="sl-add" style="margin-bottom:12px">+ Позиция</button>
@@ -290,35 +299,66 @@
         <div class="muted" style="margin-bottom:12px">Итого: <b id="sl-total" style="color:var(--ink)">0</b></div>
         <button class="btn block" id="sl-go">Оформить продажу</button>
       </div>
+    </section>
 
-      <div class="card stack" id="f-writeoff" hidden><h2>Списание</h2>
+    <section id="p-writeoff" hidden>
+      <h1 class="page">Списание</h1>
+      <p class="sub">Списание брака, порчи или усушки со склада.</p>
+      <div class="card stack" id="f-writeoff">
         <div><label class="f" for="wo-grade">Сорт</label><select id="wo-grade"></select></div>
         <div><label class="f" for="wo-kg">Вес, кг</label><div class="wrow"><input id="wo-kg" type="number" inputmode="decimal" step="0.001" min="0"><button class="btn sec sm sc-read" data-t="wo-kg">С весов</button></div></div>
         <input id="wo-reason" placeholder="Причина (усушка, порча, брак...)">
         <button class="btn block" id="wo-go">Списать</button>
       </div>
+    </section>
 
-      <div class="card"><h2>Мои операции</h2><div class="small muted" style="margin:-6px 0 10px">Операция сначала попадает в очередь, склад выполняет её и проверяет остаток. Статус обновляется сам.</div><div id="ops-list"></div></div>
+    <div id="ops-shared" hidden>
+      <div class="banner" id="ops-stale" hidden></div>
+      <details class="card scale-card" id="scale-card">
+        <summary><span>Весы (Web Serial)</span><span class="small muted" id="scale-pill">настройка</span></summary>
+        <div class="small muted" id="scale-state"></div>
+        <div class="acts"><button class="btn sec sm" id="sc-conn">Подключить весы</button><button class="btn sec sm" id="sc-off" hidden>Отключить</button></div>
+        <div style="margin-top:12px"><label class="f" for="tare-g">Вес пустого ящика, г (вычитается при чтении с весов)</label><input id="tare-g" type="number" inputmode="decimal" min="0" value="0"></div>
+        <div class="small muted" style="margin-top:10px">Вес, введённый на сайте или считанный через браузер, записывается как ручной: программа на складе не может проверить, что число с весов.</div>
+      </details>
+    </div>
+
+    <section id="p-queue" hidden>
+      <h1 class="page">Очередь</h1>
+      <p class="sub">Операции и правки с сайта. Изменения применяются на сайте сразу, а моноблок подтягивает их при выходе на связь.</p>
+      <div class="card"><div id="ops-list"></div></div>
     </section>
 
     <section id="p-users" hidden>
-      <h1 class="page">Люди</h1>
-      <p class="sub">Сотрудники сайта и их роли</p>
-      <div class="card"><h2>Пользователи сайта</h2><div id="u-rows"></div></div>
-      <div class="card"><h2>Добавить пользователя</h2>
-        <div class="stack">
-          <input id="u-name" placeholder="Имя (подпись в списке и журнале)">
-          <input id="u-pw" type="password" placeholder="Временный пароль, от 8 символов" autocomplete="new-password">
-          <select id="u-role"><option value="director">Директор: остатки, отчёты, история</option><option value="keeper">Складовщик: то же + приход и продажа</option><option value="admin">Администратор: всё + пользователи</option></select>
-          <button class="btn block" id="u-add">Добавить</button>
+      <div class="page-head">
+        <div>
+          <h1 class="page">Сотрудники</h1>
+          <p class="sub">Создавайте директоров, складовщиков и администраторов и выдавайте каждому свой пароль</p>
         </div>
-        <div class="small muted" style="margin-top:12px">Вход только по паролю: по нему сайт узнаёт человека и его роль, поэтому у каждого пароль свой (одинаковые не принимаются). Человек войдёт с этим паролем и сразу выберет свой. Директор и складовщик видят остатки, отчёты и историю.</div>
-        <div class="err" id="u-err" style="margin-top:10px"></div>
+        <button class="btn" id="u-open-add"><svg><use href="#i-plus"/></svg>Новый сотрудник</button>
       </div>
-      <div class="card"><h2>Журнал входов и действий</h2><div id="a-rows"></div></div>
+      <div class="card"><div id="u-rows"></div></div>
+    </section>
+
+    <section id="p-log" hidden>
+      <h1 class="page">Журнал действий</h1>
+      <p class="sub">Входы, неудачные попытки и изменения на сайте</p>
+      <div class="card"><div id="a-rows"></div></div>
     </section>
   </main>
 </div>
+
+<dialog id="u-add-dlg">
+  <h3>Новый сотрудник</h3>
+  <div class="stack">
+    <div><label class="f" for="u-name">Имя</label><input id="u-name" placeholder="Подпись в списке и журнале"></div>
+    <div><label class="f" for="u-pw">Временный пароль</label><input id="u-pw" type="password" placeholder="Не короче 8 символов" autocomplete="new-password"></div>
+    <div><label class="f" for="u-role">Роль</label><select id="u-role"><option value="director">Директор: остатки, отчёты, история</option><option value="keeper">Складовщик: то же + приход, продажа, списание</option><option value="admin">Администратор: всё + сотрудники и журнал</option></select></div>
+  </div>
+  <div class="small muted" style="margin-top:12px">Вход только по паролю: у каждого пароль свой (одинаковые не принимаются). При первом входе сотрудник сразу выберет постоянный пароль.</div>
+  <div class="err" id="u-err" style="margin-top:10px"></div>
+  <div class="acts" style="justify-content:flex-end"><button class="btn sec" id="u-cancel">Отмена</button><button class="btn" id="u-add">Создать</button></div>
+</dialog>
 
 <dialog id="menu-dlg">
   <h3 id="md-name">Пользователь</h3>
@@ -366,8 +406,12 @@ const NAV = [
   ['stock', 'Остатки', 'i-stock', null, 'Склад'],
   ['report', 'Отчёт', 'i-report', null, 'Склад'],
   ['history', 'История', 'i-history', null, 'Склад'],
-  ['ops', 'Операции', 'i-ops', ['keeper', 'admin'], 'Работа'],
-  ['users', 'Люди', 'i-users', ['admin'], 'Администрирование'],
+  ['intake', 'Приход', 'i-in', ['keeper', 'admin'], 'Работа'],
+  ['sale', 'Продажа', 'i-out', ['keeper', 'admin'], 'Работа'],
+  ['writeoff', 'Списание', 'i-wo', ['keeper', 'admin'], 'Работа'],
+  ['queue', 'Очередь', 'i-queue', ['keeper', 'admin'], 'Работа'],
+  ['users', 'Сотрудники', 'i-users', ['admin'], 'Администрирование'],
+  ['log', 'Журнал', 'i-log', ['admin'], 'Администрирование'],
 ];
 let cur = 'сум', tab = 'stock', timer = null, me = null, toastT = null, lastPw = '', gradeIdx = {}, hType = '';
 
@@ -450,10 +494,11 @@ async function start() {
   $('me-name').textContent = me.name;
   $('me-role').textContent = ROLE_NAME[me.role] || me.role;
   buildNav(); paintStatus(r.data); go(NAV.some(n => n[0] === tab && (!n[3] || n[3].includes(me.role))) ? tab : 'stock');
+  if (me.role !== 'director') loadOps();
   clearInterval(timer); timer = setInterval(refreshAll, 30000);
 }
 async function refreshAll() { const s = await api('GET', '/api/status'); if (s.ok) paintStatus(s.data); if (tab === 'stock') loadStock(); }
-$('refresh').onclick = async () => { await refreshAll(); if (tab === 'report') loadReport(); if (tab === 'history') loadHistory(); if (tab === 'ops') loadOps(); toast('Обновлено'); };
+$('refresh').onclick = async () => { await refreshAll(); if (tab === 'report') loadReport(); if (tab === 'history') loadHistory(); if (tab === 'queue') loadOps(); if (tab === 'users') loadUsers(); if (tab === 'log') loadLog(); toast('Обновлено'); };
 function paintStatus(d) {
   const dev = d.devices[0];
   if (!dev) { $('seen').textContent = 'нет данных'; $('dot').className = 'dot bad'; $('stale').hidden = true; return; }
@@ -468,19 +513,23 @@ function buildNav() {
   const groups = [];
   for (const it of items) { let g = groups.find(x => x.name === it[4]); if (!g) { g = { name: it[4], items: [] }; groups.push(g); } g.items.push(it); }
   $('nav').innerHTML = groups.map(g => `<div class="nav-group"><div class="glabel">${esc(g.name)}</div>${
-    g.items.map(([id, name, ic]) => `<button class="nav-item" data-tab="${id}"><svg><use href="#${ic}"/></svg><span>${esc(name)}</span></button>`).join('')
+    g.items.map(([id, name, ic]) => `<button class="nav-item" data-tab="${id}"><svg><use href="#${ic}"/></svg><span>${esc(name)}</span>${id === 'queue' ? '<span class="nav-badge" id="q-badge" hidden></span>' : ''}</button>`).join('')
   }</div>`).join('');
   document.querySelectorAll('#nav .nav-item').forEach(b => b.onclick = () => go(b.dataset.tab));
 }
 function go(id) {
   tab = id; document.querySelectorAll('#nav .nav-item').forEach(b => b.classList.toggle('sel', b.dataset.tab === id));
-  ['stock', 'report', 'history', 'ops', 'users'].forEach(p => $('p-' + p).hidden = p !== id);
+  ['stock', 'report', 'history', 'intake', 'sale', 'writeoff', 'queue', 'users', 'log'].forEach(p => $('p-' + p).hidden = p !== id);
+  const isOp = id === 'intake' || id === 'sale' || id === 'writeoff';
+  $('ops-shared').hidden = !isOp;
   clearInterval(opsTimer); closeDrawer(); window.scrollTo(0, 0);
   if (id === 'stock') loadStock();
   if (id === 'report') { if (!$('r-from').value) { $('r-from').value = iso(new Date()); $('r-to').value = iso(new Date()); } loadReport(); }
   if (id === 'history') loadHistory();
-  if (id === 'ops') { fillGrades(); loadOps(); scaleAuto(); opsTimer = setInterval(loadOps, 8000); }
-  if (id === 'users') { loadUsers(); loadLog(); }
+  if (isOp) { fillGrades(); scaleAuto(); if (id === 'sale' && !$('sl-items').children.length) addSaleRow(); }
+  if (id === 'queue') { loadOps(); opsTimer = setInterval(loadOps, 8000); }
+  if (id === 'users') loadUsers();
+  if (id === 'log') loadLog();
 }
 
 /* ───── остатки ───── */
@@ -528,7 +577,7 @@ $('h-rows').onclick = async e => {
   const b = e.target.closest('[data-a]'); if (!b) return; const m = histMap[b.dataset.id]; if (!m) return;
   if (b.dataset.a === 'cancel') {
     const reason = prompt(m.sale_id ? 'Причина отмены всей продажи:' : 'Причина отмены:'); if (!reason || !reason.trim()) return;
-    await sendCmd(m.sale_id ? 'cancel_sale' : 'cancel_movement', { id: m.sale_id || m.id, reason });
+    await sendCmd(m.sale_id ? 'cancel_sale' : 'cancel_movement', { id: m.sale_id || m.id, device: m.device, reason });
   } else openEdit(m);
 };
 async function loadHistory() {
@@ -550,28 +599,30 @@ async function loadUsers() {
   $('u-rows').innerHTML = '';
   r.data.forEach(u => {
     const el = document.createElement('div'); el.className = 'li'; el.style.cssText = 'display:block';
-    el.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(u.name)}</b><span class="badge b-${u.role}">${ROLE_NAME[u.role] || u.role}</span>${u.active ? '' : '<span class="badge b-off">отключён</span>'}</div>
+    el.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(u.name)}</b><span class="badge b-${u.role}">${ROLE_NAME[u.role] || u.role}</span>${u.active ? '<span class="badge b-active">Активен</span>' : '<span class="badge b-off">Отключён</span>'}</div>
       <div class="s small muted" style="margin-top:3px">${u.must_change ? 'ещё не сменил пароль · ' : ''}вход: ${esc(u.last_login || '—')}</div>
-      <div class="acts"><button class="btn sec sm" data-a="name">Имя</button><select class="rolesel" aria-label="Роль" style="width:auto;min-height:38px;padding:7px 10px;font-size:14px;border-radius:9px">${Object.entries(ROLE_NAME).map(([k, v]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${v}</option>`).join('')}</select><button class="btn sec sm" data-a="pw">Новый пароль</button><button class="btn sec sm" data-a="active">${u.active ? 'Отключить' : 'Включить'}</button></div>`;
-    el.querySelector('.rolesel').onchange = async e => { const r2 = await api('PATCH', '/api/users', { id: u.id, role: e.target.value }); toast(r2.ok ? 'Роль изменена' : msg(r2), !r2.ok); loadUsers(); loadLog(); };
+      <div class="acts"><button class="btn sec sm" data-a="name">Имя</button><select class="rolesel" aria-label="Роль" style="width:auto;min-height:34px;padding:6px 10px;font-size:13.5px;border-radius:9px">${Object.entries(ROLE_NAME).map(([k, v]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${v}</option>`).join('')}</select><button class="btn sec sm" data-a="pw">Новый пароль</button><button class="btn sec sm" data-a="active">${u.active ? 'Отключить' : 'Включить'}</button></div>`;
+    el.querySelector('.rolesel').onchange = async e => { const r2 = await api('PATCH', '/api/users', { id: u.id, role: e.target.value }); toast(r2.ok ? 'Роль изменена' : msg(r2), !r2.ok); loadUsers(); };
     el.querySelectorAll('button').forEach(b => b.onclick = async () => {
       if (b.dataset.a === 'pw') return openPw(u);
       const patch = { id: u.id };
       if (b.dataset.a === 'name') { const n = prompt('Новое имя:', u.name); if (!n) return; patch.name = n; }
       if (b.dataset.a === 'active') patch.active = !u.active;
-      const r2 = await api('PATCH', '/api/users', patch); toast(r2.ok ? 'Сохранено' : msg(r2), !r2.ok); loadUsers(); loadLog();
+      const r2 = await api('PATCH', '/api/users', patch); toast(r2.ok ? 'Сохранено' : msg(r2), !r2.ok); loadUsers();
     });
     $('u-rows').appendChild(el);
   });
 }
+$('u-open-add').onclick = () => { $('u-err').textContent = ''; $('u-name').value = ''; $('u-pw').value = ''; $('u-add-dlg').showModal(); $('u-name').focus(); };
+$('u-cancel').onclick = () => $('u-add-dlg').close();
 $('u-add').onclick = async () => {
   const r = await api('POST', '/api/users', { name: $('u-name').value, password: $('u-pw').value, role: $('u-role').value });
   if (!r.ok) { $('u-err').textContent = msg(r); return; }
-  $('u-err').textContent = ''; $('u-name').value = ''; $('u-pw').value = ''; toast('Пользователь добавлен'); loadUsers(); loadLog();
+  $('u-err').textContent = ''; $('u-name').value = ''; $('u-pw').value = ''; $('u-add-dlg').close(); toast('Сотрудник добавлен'); loadUsers();
 };
 async function loadLog() {
   const r = await api('GET', '/api/users?log=1'); if (!r.ok) return;
-  $('a-rows').innerHTML = `<ul class="list">${r.data.map(a => row(`${esc(a.user_name || '—')} · ${esc(a.action)}`, `${esc(a.detail)}${a.ip ? ' · ' + esc(a.ip) : ''}`, `<span class="small muted">${esc(a.ts.slice(5, 16))}</span>`)).join('')}</ul>`;
+  $('a-rows').innerHTML = r.data.length ? `<ul class="list">${r.data.map(a => row(`${esc(a.user_name || '—')} · ${esc(a.action)}`, `${esc(a.detail)}${a.ip ? ' · ' + esc(a.ip) : ''}`, `<span class="small muted">${esc(a.ts.slice(5, 16))}</span>`)).join('')}</ul>` : '<div class="empty">Записей нет</div>';
 }
 
 /* ───── операции с сайта: уходят в очередь, склад выполняет и отвечает ───── */
@@ -584,17 +635,12 @@ function fillGrades() {
   $('ops-stale').hidden = !stale;
   if (stale) $('ops-stale').textContent = 'Склад не на связи. Операция будет выполнена, когда программа на складе выйдет на связь (в течение суток), иначе она просрочится.';
 }
-$('op-kinds').onclick = e => {
-  const b = e.target.closest('[data-k]'); if (!b) return;
-  document.querySelectorAll('#op-kinds .chip').forEach(c => c.classList.toggle('sel', c === b));
-  $('f-intake').hidden = b.dataset.k !== 'intake'; $('f-sale').hidden = b.dataset.k !== 'sale'; $('f-writeoff').hidden = b.dataset.k !== 'writeoff';
-  if (b.dataset.k === 'sale' && !$('sl-items').children.length) addSaleRow();
-};
 const rid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
 async function sendCmd(kind, payload, requestId) {
   const r = await api('POST', '/api/command', { kind, payload, request_id: requestId || rid() });
   if (!r.ok) { toast(msg(r), true); return false; }
-  toast(r.data.duplicate ? 'Эта операция уже принята' : 'Принято. Склад выполнит и подтвердит'); if (tab === 'ops') loadOps(); else loadHistory();
+  toast(r.data.duplicate ? 'Эта операция уже принята' : r.data.status === 'pending' ? 'Сохранено на сайте (синхронизируется со складом)' : 'Сохранено');
+  if (tab === 'history') loadHistory(); else loadOps();
   return true;
 }
 function guard(btn, fn) {
@@ -633,8 +679,10 @@ guard($('sl-go'), async id => {
 async function loadOps() {
   const r = await api('GET', '/api/command'); if (!r.ok) return;
   fillGrades();
+  const pend = r.data.filter(c => c.status === 'pending').length;
+  const qb = $('q-badge'); if (qb) { qb.textContent = pend; qb.hidden = !pend; }
   const desc = c => { const p = c.payload || {}; return c.kind === 'intake' ? `${p.grade} ${p.net_kg} кг` : c.kind === 'writeoff' ? `${p.grade} ${p.net_kg} кг, ${p.reason}` : c.kind === 'sale' ? `${p.customer}: ${(p.items || []).map(i => i.grade + ' ' + i.net_kg).join(', ')}` : c.kind === 'edit' ? `запись #${p.id}: ${p.reason}` : `#${p.id}: ${p.reason}`; };
-  $('ops-list').innerHTML = r.data.length ? `<ul class="list">${r.data.map(c => { const [t, cl] = ST[c.status] || [c.status, '']; return row(`${esc(KIND[c.kind] || c.kind)} <span class="badge ${cl}">${t}</span>`, `${esc(desc(c))}${c.result ? '<br>' + esc(c.result) : ''}`, `<span class="small muted">${esc(c.ts.slice(5))}</span>`); }).join('')}</ul>` : '<div class="muted">Пока ничего</div>';
+  $('ops-list').innerHTML = r.data.length ? `<ul class="list">${r.data.map(c => { const [t, cl] = ST[c.status] || [c.status, '']; return row(`${esc(KIND[c.kind] || c.kind)} <span class="badge ${cl}">${t}</span>`, `${esc(desc(c))}${c.result ? '<br>' + esc(c.result) : ''}`, `<span class="small muted">${esc(c.ts.slice(5))}</span>`); }).join('')}</ul>` : '<div class="empty">Пока ничего</div>';
 }
 
 /* ───── исправление записи (админ) ───── */
@@ -648,13 +696,13 @@ function openEdit(m) {
 }
 $('ed-cancel').onclick = () => $('ed-dlg').close();
 $('ed-ok').onclick = async () => {
-  const m = edTarget, p = { id: m.id, reason: $('ed-reason').value };
+  const m = edTarget, p = { id: m.id, device: m.device, reason: $('ed-reason').value };
   if (!p.reason.trim()) { $('ed-err').textContent = 'Укажите причину'; return; }
   const put = (k, v, old) => { if (String(v) !== String(old ?? '')) p[k] = v; };
   put('grade', $('ed-grade').value, m.grade); put('net_kg', $('ed-kg').value, m.net_kg); put('note', $('ed-note').value, m.note || '');
   if (m.type === 'in') put('worker', $('ed-worker').value, m.worker || '');
   if (m.type === 'out') { put('customer', $('ed-cust').value, m.customer || ''); put('price_per_kg', $('ed-price').value, m.price_per_kg); put('amount', $('ed-amount').value, m.amount); }
-  if (Object.keys(p).length <= 2) { $('ed-err').textContent = 'Ничего не изменено'; return; }
+  if (Object.keys(p).length <= 3) { $('ed-err').textContent = 'Ничего не изменено'; return; }
   if (await sendCmd('edit', p)) $('ed-dlg').close();
 };
 
@@ -665,6 +713,7 @@ const scaleMsg = t => { $('scale-state').textContent = t; };
 function scaleUi() {
   const has = 'serial' in navigator;
   $('sc-conn').hidden = !has || !!SC.port; $('sc-off').hidden = !SC.port;
+  $('scale-pill').textContent = !has ? 'только Chrome/Edge' : SC.port ? 'подключены' : 'не подключены';
   scaleMsg(!has ? 'Чтение весов через браузер работает в Chrome или Edge на компьютере и Android. Введите вес вручную.' : SC.port ? 'Весы подключены. Нажмите «С весов» рядом с полем веса.' : 'Весы не подключены. Подключите кабель и нажмите «Подключить весы», выберите порт.');
   document.querySelectorAll('.sc-read').forEach(b => b.hidden = !has);
 }

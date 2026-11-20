@@ -307,8 +307,8 @@ test('роли: складовщик создаётся и видит данны
   await assert.rejects(db.query(`INSERT INTO app_users(name, role, pass_hash) VALUES ('Левый','root','x')`), 'база не принимает неизвестную роль');
 });
 
-// ───────── операции с сайта: очередь для моноблока ─────────
-test('операции с сайта: права ролей, проверка данных, очередь, ответы моноблока, защита от повтора', async () => {
+// ───────── операции с сайта: мгновенное применение в облаке + синхронизация с моноблоком ─────────
+test('операции с сайта: мгновенное применение, защита от перезаписи моноблоком, новые офлайн-записи, права и лимит', async () => {
   const db = globalThis.__TEST_DB;
   await db.query('DELETE FROM login_fails');
   const { cookie: admin } = await signIn(OWNER_PW);
@@ -336,46 +336,69 @@ test('операции с сайта: права ролей, проверка д
     ['неизвестная операция', 'drop_table', {}],
   ]) assert.equal((await post(keeper, kind, payload)).code, 400, why);
 
-  // принятая операция: в очередь попадает только очищенный набор полей
+  // новые операции с сайта сразу применяются в облаке (device='web') и меняют остаток
+  const before = (await call(stock, adm)).body.rows.find((r) => r.grade === 'Высший').balance_kg;
   const ok = await post(keeper, 'intake', { ...P, evil: 'DROP', note: 'n' }, { request_id: 'req-1' });
   assert.equal(ok.code, 200);
+  assert.equal(ok.body.applied_cloud, true);
+  assert.equal(ok.body.status, 'applied');
   assert.equal((await post(keeper, 'intake', P, { request_id: 'req-1' })).body.duplicate, true, 'повтор того же запроса не создаёт вторую операцию');
   const sale = await post(keeper, 'sale', { customer: 'ООО', items: [{ grade: 'Высший', net_kg: 3, price_per_kg: 20000, amount: 60000 }] });
   assert.equal(sale.code, 200);
-  const adminEdit = await post(admin, 'edit', { id: 1, reason: 'ошибка весов', net_kg: 90 });
+  assert.equal(sale.body.status, 'applied');
+  const after = (await call(stock, adm)).body.rows.find((r) => r.grade === 'Высший').balance_kg;
+  assert.equal(Math.round((after - before) * 1000) / 1000, 9.5, 'остаток на сайте обновился сразу (+12.5 - 3)');
+
+  // исправление записи моноблока: сразу меняет movements в облаке И ставит pending-команду для point-1
+  const adminEdit = await post(admin, 'edit', { id: 1, device: 'point-1', reason: 'ошибка весов', net_kg: 90 });
   assert.equal(adminEdit.code, 200);
+  assert.equal(adminEdit.body.status, 'pending');
+  const [m1] = await db.query(`SELECT net_kg, manual FROM movements WHERE device='point-1' AND id=1`);
+  assert.equal(m1.net_kg, 90, 'правка сразу видна в облачной БД');
+  assert.equal(m1.manual, true);
 
-  // моноблок забирает очередь; чужое устройство не видит и не закрывает чужие операции
+  // моноблок забирает очередь; чужое устройство не видит и не закрывает чужую команду
   const dev = (b) => call(ingest, { method: 'POST', body: { device: 'point-1', crop: 'Клубника', currency: 'сум', grades: BATCH.grades, pending: 0, movements: [], ...b }, headers: AUTH });
-  const other = await call(ingest, { method: 'POST', body: { device: 'other-device', acks: [{ id: ok.body.id, status: 'applied', result: 'взлом' }], movements: [] }, headers: AUTH });
+  const other = await call(ingest, { method: 'POST', body: { device: 'other-device', acks: [{ id: adminEdit.body.id, status: 'applied', result: 'взлом' }], movements: [] }, headers: AUTH });
   assert.deepEqual(other.body.commands, [], 'другое устройство очередь не получает');
-  const got = await dev({});
-  assert.equal(got.body.commands.length, 3);
-  const first = got.body.commands.find((c) => c.id === ok.body.id);
-  assert.deepEqual(Object.keys(first.payload).sort(), ['grade', 'net_kg', 'note', 'worker'], 'лишние поля отброшены');
-  assert.equal(first.user_name, 'Складовщик Анвар');
-  assert.equal(first.user_role, 'keeper');
-  assert.equal((await dev({})).body.commands.length, 3, 'без ответа операция приходит снова');
 
-  // ответы: выполнено / отклонено; повтор ответа не перезаписывает
-  await dev({ acks: [{ id: ok.body.id, status: 'applied', result: 'приход #5' }, { id: sale.body.id, status: 'rejected', result: 'отклонено: остаток' }, { id: 999, status: 'applied' }, { id: adminEdit.body.id, status: 'hacked' }] });
-  await dev({ acks: [{ id: ok.body.id, status: 'rejected', result: 'позже' }] });
-  const rows = (await call(command, as(keeper))).body;
-  assert.equal(rows.find((r) => r.id === ok.body.id).status, 'applied');
-  assert.equal(rows.find((r) => r.id === ok.body.id).result, 'приход #5', 'завершённую операцию ответом не переписать');
-  assert.equal(rows.find((r) => r.id === sale.body.id).status, 'rejected');
-  assert.ok(!rows.some((r) => r.id === adminEdit.body.id), 'складовщик видит только свои операции');
-  assert.equal((await call(command, adm)).body.length >= 3, true, 'админ видит все');
-  assert.equal((await dev({})).body.commands.length, 1, 'осталась только операция админа (ответ «hacked» не принят)');
+  // защита от перезаписи: если моноблок прислал старую версию id=1 + новую офлайн-запись id=99 ДО ack,
+  // облачная правка id=1 сохраняется, а новая запись id=99 принимается!
+  const stalePush = await dev({
+    movements: [
+      { ...BATCH.movements[0], net_kg: 10 }, // старая версия id=1
+      { id: 99, ts: '2026-11-17 14:00:00', type: 'in', grade: 'Первый', gross_kg: 5.2, tare_kg: 0.2, net_kg: 5.0, worker: 'Офлайн', status: 'active' },
+    ],
+  });
+  assert.equal(stalePush.body.commands.length, 1);
+  assert.equal(stalePush.body.commands[0].id, adminEdit.body.id);
+  const [m1Still] = await db.query(`SELECT net_kg FROM movements WHERE device='point-1' AND id=1`);
+  assert.equal(m1Still.net_kg, 90, 'старые данные моноблока не затёрли свежую правку сайта');
+  const [m99] = await db.query(`SELECT net_kg FROM movements WHERE device='point-1' AND id=99`);
+  assert.equal(m99.net_kg, 5, 'новая офлайн-запись моноблока сохранилась');
 
-  // срок давности: через сутки операция не выполняется
-  await db.query(`UPDATE commands SET ts = now() - interval '25 hours' WHERE id=$1`, [adminEdit.body.id]);
+  // подтверждение от моноблока закрывает команду; повторный ответ не перезаписывает
+  await dev({ acks: [{ id: adminEdit.body.id, status: 'hacked' }] });
+  assert.equal((await dev({})).body.commands.length, 1, 'неверный статус ответа игнорируется');
+  await dev({ acks: [{ id: adminEdit.body.id, status: 'applied', result: 'запись #1 исправлена' }] });
+  await dev({ acks: [{ id: adminEdit.body.id, status: 'rejected', result: 'позже' }] });
   assert.equal((await dev({})).body.commands.length, 0);
-  assert.equal((await call(command, adm)).body.find((r) => r.id === adminEdit.body.id).status, 'expired');
+  const admCmds = (await call(command, adm)).body;
+  assert.equal(admCmds.find((r) => r.id === adminEdit.body.id).status, 'applied');
+  assert.equal(admCmds.find((r) => r.id === adminEdit.body.id).result, 'запись #1 исправлена');
+  assert.ok(!(await call(command, as(keeper))).body.some((r) => r.id === adminEdit.body.id), 'складовщик видит только свои операции');
 
-  // лимит ожидающих операций на человека
-  await db.query(`UPDATE commands SET status='rejected' WHERE status='pending'`);
-  let last;
-  for (let i = 0; i < 21; i++) last = await post(keeper, 'intake', { ...P, net_kg: 1 + i });
-  assert.equal(last.code, 429, 'больше 20 ожидающих операций не принимается');
+  // срок давности: через 30 дней несинхронизированная команда помечается expired
+  const edit2 = await post(admin, 'edit', { id: 1, device: 'point-1', reason: 'тест срока', net_kg: 91 });
+  assert.equal(edit2.code, 200);
+  await db.query(`UPDATE commands SET ts = now() - interval '31 days' WHERE id=$1`, [edit2.body.id]);
+  assert.equal((await dev({})).body.commands.length, 0);
+  assert.equal((await call(command, adm)).body.find((r) => r.id === edit2.body.id).status, 'expired');
+
+  // лимит 20 ожидающих команд на человека
+  for (let i = 0; i < 20; i++) {
+    await db.query(`INSERT INTO commands(device,user_name,user_role,kind,payload,status) VALUES('point-1','Складовщик Анвар','keeper','edit','{"id":1}'::jsonb,'pending')`);
+  }
+  const over = await post(keeper, 'intake', P);
+  assert.equal(over.code, 429, 'больше 20 ожидающих команд не принимается');
 });
