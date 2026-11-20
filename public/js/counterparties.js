@@ -1,6 +1,5 @@
-// Модуль «Контрагенты и Акт сверки»: список контрагентов, взаиморасчёты, оплаты и печатный/PNG Акт сверки.
+// Модуль «Контрагенты и Акт сверки»: список контрагентов и полноценная CRM-страница контрагента (Акт сверки / Оплаты / Реквизиты).
 import { api, errMsg } from './api.js';
-import { editBtnHtml } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -18,18 +17,30 @@ const KIND_LABEL = {
 let deps = { cur: () => 'сум', crop: () => 'Клубника', toast: () => {}, askText: async () => null, onRefsChanged: async () => {} };
 let rows = [];
 let kindFilter = '';
-let editTarget = null;
-let payTarget = null;
+let currentCp = null; // null = новый контрагент
+let detailTab = 'rec'; // rec | pay | crm
 let payDir = 'in';
 let payMethod = 'cash';
-let recTargetName = '';
 let lastRec = null;
+
+function showCpView(mode) {
+  $('cp-list-view').hidden = mode !== 'list';
+  $('cp-detail-view').hidden = mode !== 'detail';
+  window.scrollTo(0, 0);
+}
 
 function balanceText(bal, cur) {
   const n = Number(bal || 0);
   if (n > 0) return `Задолженность контрагента в нашу пользу: ${money(n)} ${cur}`;
   if (n < 0) return `Наша задолженность перед контрагентом: ${money(Math.abs(n))} ${cur}`;
   return 'Задолженность отсутствует (сальдо 0)';
+}
+
+function balBadgeHtml(bal, cur) {
+  const n = Number(bal || 0);
+  if (n > 0) return `<span class="bal-pill pos">должен нам ${money(n)} ${esc(cur)}</span>`;
+  if (n < 0) return `<span class="bal-pill neg">мы должны ${money(Math.abs(n))} ${esc(cur)}</span>`;
+  return `<span class="bal-pill zero">сальдо 0</span>`;
 }
 
 function renderList() {
@@ -58,24 +69,19 @@ function renderList() {
       if (kindFilter === 'employee' && c.kind !== 'employee') return false;
     }
     if (q) {
-      const hay = `${c.name} ${c.inn || ''} ${c.phone || ''} ${c.note || ''}`.toLowerCase();
+      const hay = `${c.name} ${c.inn || ''} ${c.phone || ''} ${c.contact_person || ''} ${c.address || ''} ${c.note || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   });
 
   $('cp-list').innerHTML = filtered.map((c) => {
-    const bal = Number(c.balance || 0);
-    const balBadge = bal > 0
-      ? `<span class="bal-pill pos">должен нам ${money(bal)} ${esc(cur)}</span>`
-      : bal < 0
-        ? `<span class="bal-pill neg">мы должны ${money(Math.abs(bal))} ${esc(cur)}</span>`
-        : `<span class="bal-pill zero">сальдо 0</span>`;
     const meta = [
       `<span class="badge b-director">${esc(KIND_LABEL[c.kind] || c.kind)}</span>`,
-      c.inn ? `ИНН ${esc(c.inn)}` : '',
+      c.contact_person ? esc(c.contact_person) : '',
       c.phone ? esc(c.phone) : '',
-      c.active ? '' : '<span class="badge b-off">скрыт</span>',
+      c.inn ? `ИНН ${esc(c.inn)}` : '',
+      c.active ? '' : '<span class="badge b-off">Скрыт</span>',
     ].filter(Boolean).join(' · ');
     const stats = [
       c.sales_total ? `продажи: ${money(c.sales_total)}` : '',
@@ -85,87 +91,112 @@ function renderList() {
     ].filter(Boolean).join(' · ');
 
     return `
-      <div class="cp-card${c.active ? '' : ' off'}">
+      <div class="cp-card click-card${c.active ? '' : ' off'}" data-open-cp="${c.id}">
         <div class="cp-top">
           <div style="min-width:0;flex:1">
             <div class="cp-name">${esc(c.name)}</div>
             <div class="small muted" style="margin-top:3px">${meta}</div>
             ${stats ? `<div class="small muted" style="margin-top:4px">${stats}</div>` : ''}
-            ${c.note ? `<div class="small muted" style="margin-top:2px">${esc(c.note)}</div>` : ''}
+            ${c.address ? `<div class="small muted" style="margin-top:2px">${esc(c.address)}</div>` : ''}
           </div>
-          <div style="display:flex;align-items:center;gap:6px;flex:none">
-            ${balBadge}
-            ${editBtnHtml(`data-cp-act="edit" data-id="${c.id}"`, 'Редактировать контрагента')}
+          <div style="display:flex;align-items:center;gap:8px;flex:none">
+            ${balBadgeHtml(c.balance, cur)}
+            <span class="pnl-arr">›</span>
           </div>
-        </div>
-        <div class="acts" style="margin-top:10px">
-          <button class="btn sm" data-cp-act="rec" data-id="${c.id}">Акт сверки</button>
-          <button class="btn sec sm" data-cp-act="pay" data-id="${c.id}">+ Оплата</button>
         </div>
       </div>`;
   }).join('') || '<div class="empty">Контрагентов пока нет</div>';
 
-  $('cp-list').querySelectorAll('[data-cp-act]').forEach((b) => {
-    b.onclick = async () => {
-      const c = rows.find((x) => String(x.id) === b.dataset.id);
-      if (!c) return;
-      const act = b.dataset.cpAct;
-      if (act === 'rec') return openReconcile(c.name);
-      if (act === 'pay') return openPayment(c);
-      if (act === 'edit') return openCpModal(c);
+  $('cp-list').querySelectorAll('[data-open-cp]').forEach((el) => {
+    el.onclick = () => {
+      const c = rows.find((x) => String(x.id) === el.dataset.openCp);
+      if (c) openCpDetail(c, 'rec');
     };
   });
 }
 
-export async function loadCounterparties() {
+export async function loadCounterparties(keepCpId = null) {
   const r = await api('GET', '/api/report?resource=reconcile');
   if (!r.ok) return;
   rows = r.data.counterparties || [];
   renderList();
+  if (keepCpId) {
+    const updated = rows.find((x) => x.id === keepCpId);
+    if (updated) {
+      openCpDetail(updated, detailTab);
+      return;
+    }
+  }
+  showCpView('list');
 }
 
-/* ───── создание / редактирование контрагента ───── */
-function openCpModal(c = null) {
-  editTarget = c;
-  $('cp-dlg-title').textContent = c ? 'Редактировать контрагента' : 'Новый контрагент';
+/* ───── Полноценная страница карточки контрагента ───── */
+function switchDetailTab(tab) {
+  detailTab = tab;
+  document.querySelectorAll('#cp-detail-tabs button').forEach((b) => b.classList.toggle('sel', b.dataset.cpt === tab));
+  $('cp-tab-rec').hidden = tab !== 'rec';
+  $('cp-tab-pay').hidden = tab !== 'pay';
+  $('cp-tab-crm').hidden = tab !== 'crm';
+  if (tab === 'rec' && currentCp) fetchReconcile();
+}
+
+function openCpDetail(c = null, tab = 'rec') {
+  currentCp = c;
+  const cur = deps.cur();
+  $('cp-det-title').textContent = c ? c.name : 'Новый контрагент';
+  $('cp-det-sub').innerHTML = c
+    ? `${esc(KIND_LABEL[c.kind] || c.kind)}${c.inn ? ` · ИНН ${esc(c.inn)}` : ''}${c.phone ? ` · ${esc(c.phone)}` : ''}`
+    : 'Заполните карточку контрагента';
+  $('cp-det-bal').innerHTML = c ? balBadgeHtml(c.balance, cur) : '';
+  $('cp-detail-tabs').hidden = !c;
+
+  // Заполняем форму CRM-реквизитов
   $('cp-f-name').value = c ? c.name : '';
   $('cp-f-kind').value = c ? (c.kind || 'buyer') : 'buyer';
   $('cp-f-inn').value = c ? (c.inn || '') : '';
+  $('cp-f-contact').value = c ? (c.contact_person || '') : '';
   $('cp-f-phone').value = c ? (c.phone || '') : '';
+  $('cp-f-tg').value = c ? (c.telegram || '') : '';
+  $('cp-f-addr').value = c ? (c.address || '') : '';
+  $('cp-f-terms').value = c ? (c.payment_terms || '') : '';
+  $('cp-f-bank').value = c ? (c.bank_details || '') : '';
   $('cp-f-note').value = c ? (c.note || '') : '';
   $('cp-f-err').textContent = '';
+
   const tog = $('cp-f-toggle');
-  if (tog) {
-    tog.hidden = !c;
-    if (c) {
-      tog.textContent = c.active ? 'Скрыть' : 'Вернуть';
-      tog.className = c.active ? 'btn ghost danger' : 'btn ghost';
+  tog.hidden = !c;
+  if (c) {
+    tog.textContent = c.active ? 'Скрыть контрагента' : 'Вернуть в список';
+    tog.className = c.active ? 'btn ghost danger' : 'btn ghost';
+  }
+
+  // Настраиваем форму оплаты
+  if (c) {
+    payDir = c.kind === 'supplier' || c.kind === 'employee' || c.balance < 0 ? 'out' : 'in';
+    payMethod = 'cash';
+    $('pay-date').value = iso(new Date());
+    $('pay-amt').value = c.balance !== 0 ? String(Math.abs(c.balance)) : '';
+    $('pay-comment').value = '';
+    $('pay-err').textContent = '';
+    document.querySelectorAll('#pay-dir-chips .chip').forEach((ch) => ch.classList.toggle('sel', ch.dataset.dir === payDir));
+    document.querySelectorAll('#pay-pm-chips .chip').forEach((ch) => ch.classList.toggle('sel', ch.dataset.pm === payMethod));
+
+    const today = iso(new Date());
+    if (!$('rec-from').value) {
+      $('rec-from').value = today.slice(0, 8) + '01';
+      $('rec-to').value = today;
     }
   }
-  $('cp-dlg').showModal();
-  $('cp-f-name').focus();
-}
 
-/* ───── внесение оплаты ───── */
-function openPayment(c) {
-  payTarget = c;
-  payDir = c.kind === 'supplier' || c.kind === 'employee' || c.balance < 0 ? 'out' : 'in';
-  payMethod = 'cash';
-  $('pay-dlg-title').textContent = `Оплата · ${c.name}`;
-  $('pay-date').value = iso(new Date());
-  $('pay-amt').value = c.balance !== 0 ? String(Math.abs(c.balance)) : '';
-  $('pay-comment').value = '';
-  $('pay-err').textContent = '';
-  document.querySelectorAll('#pay-dir-chips .chip').forEach((ch) => ch.classList.toggle('sel', ch.dataset.dir === payDir));
-  document.querySelectorAll('#pay-pm-chips .chip').forEach((ch) => ch.classList.toggle('sel', ch.dataset.pm === payMethod));
-  $('pay-dlg').showModal();
-  $('pay-amt').focus();
+  showCpView('detail');
+  switchDetailTab(c ? tab : 'crm');
+  if (!c) $('cp-f-name').focus();
 }
 
 /* ───── Акт сверки взаимных расчётов ───── */
 function buildRecHtml(d) {
   const cur = deps.cur();
-  const cp = d.counterparty || { name: recTargetName };
+  const cp = d.counterparty || currentCp || { name: '' };
   const docRows = (d.docs || []).map((x) => {
     const canCancel = x.type === 'payment_in' || x.type === 'payment_out';
     return `
@@ -197,12 +228,7 @@ function buildRecHtml(d) {
       </div>
       <table class="inv-tbl">
         <thead>
-          <tr>
-            <th>Дата</th>
-            <th>Документ</th>
-            <th class="num">Дебет</th>
-            <th class="num">Кредит</th>
-          </tr>
+          <tr><th>Дата</th><th>Документ</th><th class="num">Дебет</th><th class="num">Кредит</th></tr>
         </thead>
         <tbody>
           <tr style="background:var(--soft);font-weight:600">
@@ -234,9 +260,11 @@ function buildRecHtml(d) {
 }
 
 async function fetchReconcile() {
+  if (!currentCp) return;
   const from = $('rec-from').value;
   const to = $('rec-to').value;
-  const qs = new URLSearchParams({ resource: 'reconcile', counterparty: recTargetName, from, to });
+  $('rec-body').innerHTML = '<div class="empty">Загрузка…</div>';
+  const qs = new URLSearchParams({ resource: 'reconcile', counterparty: currentCp.name, from, to });
   const r = await api('GET', `/api/report?${qs.toString()}`);
   if (!r.ok) { deps.toast(errMsg(r), true); return; }
   lastRec = r.data;
@@ -248,31 +276,16 @@ async function fetchReconcile() {
       if (!reason) return;
       const r2 = await api('PATCH', '/api/report?resource=payments', { id: Number(b.dataset.cancelPay), reason });
       deps.toast(r2.ok ? 'Оплата отменена' : errMsg(r2), !r2.ok);
-      if (r2.ok) {
-        await fetchReconcile();
-        await loadCounterparties();
-      }
+      if (r2.ok) await loadCounterparties(currentCp.id);
     };
   });
-}
-
-function openReconcile(name) {
-  recTargetName = name;
-  const today = iso(new Date());
-  if (!$('rec-from').value) {
-    $('rec-from').value = today.slice(0, 8) + '01';
-    $('rec-to').value = today;
-  }
-  $('rec-body').innerHTML = '<div class="empty">Загрузка…</div>';
-  $('rec-dlg').showModal();
-  fetchReconcile();
 }
 
 async function exportRecPng() {
   if (!lastRec) return;
   const d = lastRec;
   const cur = deps.cur();
-  const cp = d.counterparty || { name: recTargetName };
+  const cp = d.counterparty || currentCp || { name: '' };
   const docs = d.docs || [];
   const W = 820;
   const rowH = 34;
@@ -309,7 +322,6 @@ async function exportRecPng() {
   g.fillText(`Контрагент: ${cp.name}${cp.inn ? ` · ИНН ${cp.inn}` : ''}${cp.phone ? ` · ${cp.phone}` : ''}`, pad, y);
   y += 26;
 
-  // Заголовок таблицы
   g.fillStyle = '#f4f4f6';
   g.fillRect(pad, y, W - pad * 2, 32);
   g.fillStyle = '#55555a';
@@ -341,9 +353,7 @@ async function exportRecPng() {
 
   drawRow('', `Сальдо на начало (${dm(d.from)})`, d.opening_balance > 0 ? money(d.opening_balance) : '', d.opening_balance < 0 ? money(Math.abs(d.opening_balance)) : '', true, '#fafafa');
   if (docs.length) {
-    for (const x of docs) {
-      drawRow(dm(x.date), x.title, x.debit ? money(x.debit) : '', x.credit ? money(x.credit) : '');
-    }
+    for (const x of docs) drawRow(dm(x.date), x.title, x.debit ? money(x.debit) : '', x.credit ? money(x.credit) : '');
   } else {
     drawRow('', 'Операций за выбранный период нет', '', '');
   }
@@ -387,25 +397,31 @@ export function initCounterparties(config) {
     renderList();
   };
   $('cp-search').oninput = renderList;
-  $('cp-open-add').onclick = () => openCpModal(null);
+  $('cp-open-add').onclick = () => openCpDetail(null, 'crm');
+  $('cp-back').onclick = () => showCpView('list');
 
-  // Сохранение контрагента
-  $('cp-f-cancel').onclick = () => $('cp-dlg').close();
+  $('cp-detail-tabs').onclick = (e) => {
+    const b = e.target.closest('[data-cpt]');
+    if (!b) return;
+    switchDetailTab(b.dataset.cpt);
+  };
+
+  // Сохранение CRM-карточки контрагента
   $('cp-f-toggle').onclick = async () => {
-    if (!editTarget) return;
+    if (!currentCp) return;
     const b = $('cp-f-toggle');
     b.disabled = true;
     try {
-      const r = await api('PATCH', '/api/status?resource=refs', { target: 'customer', id: editTarget.id, active: !editTarget.active });
+      const r = await api('PATCH', '/api/status?resource=refs', { target: 'customer', id: currentCp.id, active: !currentCp.active });
       if (!r.ok) { $('cp-f-err').textContent = errMsg(r); return; }
-      $('cp-dlg').close();
-      deps.toast(editTarget.active ? 'Контрагент скрыт' : 'Контрагент возвращён');
-      await loadCounterparties();
+      deps.toast(currentCp.active ? 'Контрагент скрыт' : 'Контрагент возвращён');
       await deps.onRefsChanged();
+      await loadCounterparties();
     } finally {
       b.disabled = false;
     }
   };
+
   $('cp-f-save').onclick = async () => {
     const b = $('cp-f-save');
     b.disabled = true;
@@ -415,23 +431,27 @@ export function initCounterparties(config) {
         name: $('cp-f-name').value,
         kind: $('cp-f-kind').value,
         inn: $('cp-f-inn').value,
+        contact_person: $('cp-f-contact').value,
         phone: $('cp-f-phone').value,
+        telegram: $('cp-f-tg').value,
+        address: $('cp-f-addr').value,
+        payment_terms: $('cp-f-terms').value,
+        bank_details: $('cp-f-bank').value,
         note: $('cp-f-note').value,
       };
-      const r = editTarget
-        ? await api('PATCH', '/api/status?resource=refs', { ...payload, id: editTarget.id })
+      const r = currentCp
+        ? await api('PATCH', '/api/status?resource=refs', { ...payload, id: currentCp.id })
         : await api('POST', '/api/status?resource=refs', payload);
       if (!r.ok) { $('cp-f-err').textContent = errMsg(r); return; }
-      $('cp-dlg').close();
-      deps.toast(editTarget ? 'Контрагент обновлён' : 'Контрагент добавлен');
-      await loadCounterparties();
+      deps.toast(currentCp ? 'Карточка сохранена' : 'Контрагент добавлен');
       await deps.onRefsChanged();
+      await loadCounterparties(currentCp ? currentCp.id : r.data.customer?.id);
     } finally {
       b.disabled = false;
     }
   };
 
-  // Сохранение оплаты
+  // Проведение оплаты
   $('pay-dir-chips').onclick = (e) => {
     const b = e.target.closest('[data-dir]');
     if (!b) return;
@@ -444,24 +464,23 @@ export function initCounterparties(config) {
     payMethod = b.dataset.pm;
     document.querySelectorAll('#pay-pm-chips .chip').forEach((c) => c.classList.toggle('sel', c === b));
   };
-  $('pay-cancel').onclick = () => $('pay-dlg').close();
   $('pay-save').onclick = async () => {
-    if (!payTarget) return;
+    if (!currentCp) return;
     const b = $('pay-save');
     b.disabled = true;
     try {
       const r = await api('POST', '/api/report?resource=payments', {
         doc_date: $('pay-date').value,
-        counterparty: payTarget.name,
+        counterparty: currentCp.name,
         direction: payDir,
         amount: $('pay-amt').value,
         payment_method: payMethod,
         comment: $('pay-comment').value,
       });
       if (!r.ok) { $('pay-err').textContent = errMsg(r); return; }
-      $('pay-dlg').close();
       deps.toast('Оплата проведена');
-      await loadCounterparties();
+      detailTab = 'rec';
+      await loadCounterparties(currentCp.id);
     } finally {
       b.disabled = false;
     }
@@ -469,7 +488,6 @@ export function initCounterparties(config) {
 
   // Акт сверки
   $('rec-go').onclick = fetchReconcile;
-  $('rec-close').onclick = () => $('rec-dlg').close();
   $('rec-png').onclick = exportRecPng;
   $('rec-print').onclick = () => {
     if (!lastRec) return;

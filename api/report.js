@@ -2,6 +2,7 @@ const { query } = require('../lib/db');
 const { handler, dateRange } = require('../lib/http');
 const { handleExpenses } = require('../lib/expenses');
 const { handlePayments, handleReconcile } = require('../lib/reconcile');
+const { handleInvestments } = require('../lib/investments');
 
 const R3 = (e) => `ROUND(${e}::numeric,3)::float8`;
 const R2 = (e) => `ROUND(${e}::numeric,2)::float8`;
@@ -26,6 +27,7 @@ module.exports = handler(async (req, res) => {
   if (req.query.resource === 'expenses') return handleExpenses(req, res);
   if (req.query.resource === 'reconcile') return handleReconcile(req, res);
   if (req.query.resource === 'payments') return handlePayments(req, res);
+  if (req.query.resource === 'investments') return handleInvestments(req, res);
   if (req.method !== 'GET') return res.status(405).json({ error: 'только GET' });
 
   const [from, to] = dateRange(req.query.from, req.query.to);

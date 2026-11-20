@@ -666,3 +666,97 @@ test('контрагенты, оплаты, акт сверки и детали�
   assert.ok(Array.isArray(rep.body.loss_docs));
   assert.ok(rep.body.sales.some((s) => s.customer === 'Корзинка'));
 });
+
+test('CRM-карточка контрагента, многострочный акт расхода и раздел Инвестиции', async () => {
+  await globalThis.__TEST_DB.query('DELETE FROM login_fails');
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const { cookie: dir } = await signIn('director-pass-2');
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Расширенные CRM-поля контрагента
+  const cp = await call(status, {
+    method: 'POST',
+    query: { resource: 'refs' },
+    body: {
+      target: 'customer',
+      name: 'АгроПолив',
+      kind: 'supplier',
+      inn: '309998877',
+      contact_person: 'Сардор',
+      phone: '+998901119988',
+      telegram: '@sardor_agro',
+      address: 'Ташкент, Юнусабад',
+      payment_terms: 'Отсрочка 7 дней',
+      bank_details: 'Капиталбанк р/с 20208000',
+    },
+    ...as(dir),
+  });
+  assert.equal(cp.code, 200);
+  assert.equal(cp.body.customer.contact_person, 'Сардор');
+  assert.equal(cp.body.customer.telegram, '@sardor_agro');
+  assert.equal(cp.body.customer.payment_terms, 'Отсрочка 7 дней');
+
+  // Многострочный акт расхода (как в iiko / 1С) — сумма считается из items
+  const expList = await call(report, { query: { resource: 'expenses', from: today, to: today }, ...as(dir) });
+  const catId = expList.body.categories[0].id;
+  const act = await call(report, {
+    method: 'POST',
+    query: { resource: 'expenses' },
+    body: {
+      target: 'expense',
+      doc_date: today,
+      doc_number: 'СЧ-77',
+      category_id: catId,
+      counterparty: 'АгроПолив',
+      payment_method: 'transfer',
+      items: [
+        { name: 'Лента капельного полива', qty: 2, unit: 'шт', price: 120000 },
+        { name: 'Фитинги', qty: 10, unit: 'шт', price: 5000 },
+      ],
+    },
+    ...as(dir),
+  });
+  assert.equal(act.code, 200);
+  const expAfter = await call(report, { query: { resource: 'expenses', from: today, to: today }, ...as(dir) });
+  const savedAct = expAfter.body.items.find((x) => x.id === act.body.id);
+  assert.equal(savedAct.amount, 290000);
+  assert.equal(savedAct.doc_number, 'СЧ-77');
+  assert.equal(savedAct.items.length, 2);
+
+  // Инвестиции: создание, расчёт окупаемости и отмена
+  const inv1 = await call(report, {
+    method: 'POST',
+    query: { resource: 'investments' },
+    body: {
+      doc_date: today,
+      category: 'Постройка теплицы',
+      title: 'Каркас и плёнка',
+      investor: 'Асил',
+      amount: 10000000,
+      payment_method: 'transfer',
+      doc_number: 'ДОГ-1',
+    },
+    ...as(dir),
+  });
+  assert.equal(inv1.code, 200);
+  const inv2 = await call(report, {
+    method: 'POST',
+    query: { resource: 'investments' },
+    body: { doc_date: today, category: 'Оборудование и полив', title: 'Ошибочный дубль', investor: 'Асил', amount: 1000000 },
+    ...as(dir),
+  });
+  assert.equal(inv2.code, 200);
+  const invCanc = await call(report, {
+    method: 'PATCH',
+    query: { resource: 'investments' },
+    body: { id: inv2.body.id, reason: 'Дубль' },
+    ...as(admin),
+  });
+  assert.equal(invCanc.code, 200);
+
+  const invGet = await call(report, { query: { resource: 'investments' }, ...as(dir) });
+  assert.equal(invGet.code, 200);
+  assert.equal(invGet.body.summary.total_invested, 10000000);
+  assert.equal(invGet.body.by_investor[0].investor, 'Асил');
+  assert.equal(invGet.body.by_investor[0].share_pct, 100);
+});

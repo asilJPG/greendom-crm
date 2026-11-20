@@ -6,6 +6,7 @@ import { initInvoice, openInvoice } from './invoice.js';
 import { initExpenses, loadExpenses } from './expenses.js';
 import { initRefs, loadRefs } from './refs.js';
 import { initCounterparties, loadCounterparties } from './counterparties.js';
+import { initInvestments, loadInvestments } from './investments.js';
 import { editBtnHtml, moreBtnHtml, openRowMenu } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +33,7 @@ const ROUTES = [
   ['history', '/history', 'История', 'i-history', null, 'Склад'],
   ['report', '/report', 'Отчёт (ОПиУ)', 'i-report', ['director', 'admin'], 'Административное'],
   ['expenses', '/expenses', 'Расходы', 'i-exp', ['director', 'admin'], 'Административное'],
+  ['investments', '/investments', 'Инвестиции', 'i-inv', ['director', 'admin'], 'Административное'],
   ['counterparties', '/counterparties', 'Контрагенты', 'i-cp', ['director', 'admin'], 'Административное'],
   ['refs', '/refs', 'Справочники', 'i-refs', ['admin'], 'Администрирование'],
   ['users', '/users', 'Сотрудники', 'i-users', ['admin'], 'Администрирование'],
@@ -219,6 +221,7 @@ function navigate(id, { push = true, replace = false } = {}) {
     state.opsTimer = setInterval(loadOps, 8000);
   }
   if (ridTab === 'expenses') loadExpenses();
+  if (ridTab === 'investments') loadInvestments();
   if (ridTab === 'counterparties') loadCounterparties();
   if (ridTab === 'refs') loadRefs();
   if (ridTab === 'users') loadUsers();
@@ -473,24 +476,31 @@ async function loadHistory() {
   }).join('') || '<div class="empty">Записей нет</div>';
 }
 
-/* ───── сотрудники и журнал (админ) ───── */
+/* ───── сотрудники и журнал (админ) — полноценная страница карточки сотрудника ───── */
 let editUserTarget = null;
 
-function openUserEdit(u) {
+function showUserView(mode) {
+  $('u-list-view').hidden = mode !== 'list';
+  $('u-detail-view').hidden = mode !== 'detail';
+  window.scrollTo(0, 0);
+}
+
+function openUserDetail(u = null) {
   editUserTarget = u;
   let pwShown = false;
-  $('ue-title').textContent = u.name;
-  $('ue-sub').textContent = `Последний вход: ${u.last_login || 'ещё не входил'}`;
-  $('ue-name').value = u.name;
-  $('ue-role').value = u.role;
+  $('ue-title').textContent = u ? u.name : 'Новый сотрудник';
+  $('ue-sub').textContent = u ? `Последний вход: ${u.last_login || 'ещё не входил'}` : 'Создайте учётную запись и задайте постоянный пароль';
+  $('ue-name').value = u ? u.name : '';
+  $('ue-role').value = u ? u.role : 'director';
   $('ue-new-pw').value = '';
+  $('ue-new-pw-l').textContent = u ? 'Новый пароль (оставьте пустым, чтобы не менять)' : 'Пароль (от 6 символов)';
   $('ue-err').textContent = '';
 
   const pwBox = $('ue-pw-box');
   const pwVal = $('ue-pw-val');
   const pwShow = $('ue-pw-show');
   const pwCopy = $('ue-pw-copy');
-  if (u.password) {
+  if (u && u.password) {
     pwBox.hidden = false;
     pwVal.textContent = '••••••';
     pwShow.textContent = 'Показать';
@@ -509,50 +519,59 @@ function openUserEdit(u) {
   }
 
   const tog = $('ue-toggle');
-  tog.textContent = u.active ? 'Отключить доступ' : 'Включить доступ';
-  tog.className = u.active ? 'btn ghost danger' : 'btn ghost';
-  tog.onclick = async () => {
-    tog.disabled = true;
-    try {
-      const r = await api('PATCH', '/api/users', { id: u.id, active: !u.active });
-      if (!r.ok) { $('ue-err').textContent = errMsg(r); return; }
-      $('u-edit-dlg').close();
-      toast(u.active ? 'Сотрудник отключён' : 'Сотрудник включён');
-      loadUsers();
-    } finally {
-      tog.disabled = false;
-    }
-  };
+  tog.hidden = !u;
+  if (u) {
+    tog.textContent = u.active ? 'Отключить доступ' : 'Включить доступ';
+    tog.className = u.active ? 'btn ghost danger' : 'btn ghost';
+    tog.onclick = async () => {
+      tog.disabled = true;
+      try {
+        const r = await api('PATCH', '/api/users', { id: u.id, active: !u.active });
+        if (!r.ok) { $('ue-err').textContent = errMsg(r); return; }
+        toast(u.active ? 'Сотрудник отключён' : 'Сотрудник включён');
+        await loadUsers();
+      } finally {
+        tog.disabled = false;
+      }
+    };
+  }
 
-  $('ue-cancel').onclick = () => $('u-edit-dlg').close();
+  $('ue-save').textContent = u ? 'Сохранить изменения' : 'Создать сотрудника';
   $('ue-save').onclick = async () => {
     const b = $('ue-save');
     const name = $('ue-name').value.trim();
     const role = $('ue-role').value;
     const password = $('ue-new-pw').value;
     if (!name) { $('ue-err').textContent = 'Укажите имя'; return; }
-    const patch = { id: u.id };
-    if (name !== u.name) patch.name = name;
-    if (role !== u.role) patch.role = role;
-    if (password) patch.password = password;
-    if (Object.keys(patch).length === 1) { $('u-edit-dlg').close(); return; }
     b.disabled = true;
     try {
+      if (!u) {
+        const r = await api('POST', '/api/users', { name, role, password });
+        if (!r.ok) { $('ue-err').textContent = errMsg(r); return; }
+        toast('Сотрудник добавлен');
+        await loadUsers();
+        return;
+      }
+      const patch = { id: u.id };
+      if (name !== u.name) patch.name = name;
+      if (role !== u.role) patch.role = role;
+      if (password) patch.password = password;
+      if (Object.keys(patch).length === 1) { showUserView('list'); return; }
       const r = await api('PATCH', '/api/users', patch);
       if (!r.ok) { $('ue-err').textContent = errMsg(r); return; }
-      $('u-edit-dlg').close();
       toast('Изменения сохранены');
-      loadUsers();
+      await loadUsers();
     } finally {
       b.disabled = false;
     }
   };
 
-  $('u-edit-dlg').showModal();
+  showUserView('detail');
   $('ue-name').focus();
 }
 
 async function loadUsers() {
+  showUserView('list');
   const r = await api('GET', '/api/users');
   if (!r.ok) return;
   $('u-rows').innerHTML = '';
@@ -568,8 +587,8 @@ async function loadUsers() {
       `${u.active ? '' : '<span class="badge b-off">Отключён</span>'}</div>` +
       `<div class="small muted" style="margin-top:3px">вход: ${esc(u.last_login || '—')}</div>` +
       `</div>` +
-      editBtnHtml('', 'Настроить сотрудника');
-    el.onclick = () => openUserEdit(u);
+      editBtnHtml('', 'Открыть карточку сотрудника');
+    el.onclick = () => openUserDetail(u);
     $('u-rows').appendChild(el);
   });
 }
@@ -744,6 +763,7 @@ $('refresh').onclick = async () => {
   if (state.tab === 'history') loadHistory();
   if (state.tab === 'queue') loadOps();
   if (state.tab === 'expenses') loadExpenses();
+  if (state.tab === 'investments') loadInvestments();
   if (state.tab === 'counterparties') loadCounterparties();
   if (state.tab === 'refs') loadRefs();
   if (state.tab === 'users') loadUsers();
@@ -786,18 +806,9 @@ $('h-rows').onclick = (e) => {
   openRowMenu(b, buildHistMenuItems(m));
 };
 
-$('u-open-add').onclick = () => { $('u-err').textContent = ''; $('u-name').value = ''; $('u-pw').value = ''; $('u-add-dlg').showModal(); $('u-name').focus(); };
-$('u-cancel').onclick = () => $('u-add-dlg').close();
-$('u-add').onclick = async () => {
-  const r = await api('POST', '/api/users', { name: $('u-name').value, password: $('u-pw').value, role: $('u-role').value });
-  if (!r.ok) { $('u-err').textContent = errMsg(r); return; }
-  $('u-err').textContent = '';
-  $('u-name').value = '';
-  $('u-pw').value = '';
-  $('u-add-dlg').close();
-  toast('Сотрудник добавлен');
-  loadUsers();
-};
+$('u-open-add').onclick = () => openUserDetail(null);
+$('ue-back').onclick = () => showUserView('list');
+$('ue-cancel').onclick = () => showUserView('list');
 
 // ── Приход (вес берётся с большого табло весов) ──
 guard($('in-go'), async (id) => {
@@ -911,6 +922,12 @@ initReport({
 });
 initExpenses({
   me: () => state.me,
+  cur: () => state.cur,
+  crop: () => state.crop,
+  toast,
+  askText,
+});
+initInvestments({
   cur: () => state.cur,
   toast,
   askText,

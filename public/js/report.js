@@ -226,9 +226,14 @@ function renderBuyers(d) {
 
 const PAY_LABEL = { cash: 'Наличные', card: 'Карта', transfer: 'Перечисление' };
 
+function showReportView(mode) {
+  if ($('r-main-view')) $('r-main-view').hidden = mode !== 'main';
+  if ($('r-drill-view')) $('r-drill-view').hidden = mode !== 'drill';
+  window.scrollTo(0, 0);
+}
+
 function openDrill(kind, key, d) {
-  const dlg = $('drill-dlg');
-  if (!dlg) return;
+  if (!$('r-drill-view')) return;
   const cur = deps.cur();
   let title = '';
   let sub = `${dm(d.from)}–${dm(d.to)}`;
@@ -301,7 +306,7 @@ function openDrill(kind, key, d) {
       if (s) openInvoice(s, { crop: deps.crop(), cur: deps.cur() });
     };
   });
-  dlg.showModal();
+  showReportView('drill');
 }
 
 function renderBody() {
@@ -386,6 +391,7 @@ function buildReportQuery(extra = '') {
 }
 
 export async function loadReport() {
+  showReportView('main');
   const r = await api('GET', buildReportQuery());
   if (!r.ok) return;
   lastData = r.data;
@@ -398,5 +404,5 @@ export function initReport(config) {
   $('r-grade').onchange = loadReport;
   $('r-cust').onchange = loadReport;
   $('r-csv').onclick = () => { window.location.href = buildReportQuery('csv'); };
-  if ($('drill-close')) $('drill-close').onclick = () => $('drill-dlg').close();
+  if ($('drill-back')) $('drill-back').onclick = () => showReportView('main');
 }

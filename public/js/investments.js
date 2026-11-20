@@ -1,0 +1,171 @@
+// Модуль «Инвестиции» (/investments): капитальные вложения в теплицу, учредители и окупаемость (ROI).
+import { api, errMsg } from './api.js';
+import { moreBtnHtml, openRowMenu } from './ui.js';
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const money = (v) => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+const iso = (d) => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const dm = (s) => (s && s.length >= 10 ? s.slice(8, 10) + '.' + s.slice(5, 7) + '.' + s.slice(0, 4) : s || '');
+
+const PAY_LABEL = { cash: 'Наличные', card: 'Карта', transfer: 'Перечисление' };
+const INV_CATS = [
+  'Постройка теплицы',
+  'Оборудование и полив',
+  'Плёнка и укрытие',
+  'Рассада и субстрат',
+  'Техника и транспорт',
+  'Коммуникации и отопление',
+  'Прочие вложения',
+];
+
+let deps = { cur: () => 'сум', toast: () => {}, askText: async () => null };
+let payMethod = 'transfer';
+
+function showSubView(mode) {
+  $('inv-list-view').hidden = mode !== 'list';
+  $('inv-doc-view').hidden = mode !== 'doc';
+  window.scrollTo(0, 0);
+}
+
+function openNewInvestment() {
+  payMethod = 'transfer';
+  $('inv-f-date').value = iso(new Date());
+  $('inv-f-title').value = '';
+  $('inv-f-cat').value = INV_CATS[0];
+  $('inv-f-investor').value = '';
+  $('inv-f-amt').value = '';
+  $('inv-f-docno').value = '';
+  $('inv-f-comment').value = '';
+  $('inv-f-err').textContent = '';
+  document.querySelectorAll('#inv-f-pm .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
+  showSubView('doc');
+  $('inv-f-title').focus();
+}
+
+export async function loadInvestments() {
+  showSubView('list');
+  const r = await api('GET', '/api/report?resource=investments');
+  if (!r.ok) return;
+  const { summary: s, by_investor = [], by_category = [], items = [] } = r.data;
+  const cur = deps.cur();
+  const pctClamped = Math.max(0, Math.min(100, s.payback_pct || 0));
+
+  $('inv-kpis').innerHTML = `
+    <div class="kpi">
+      <div class="k">Всего вложено (CAPEX)</div>
+      <div class="v">${money(s.total_invested)} <small>${esc(cur)}</small></div>
+      <div class="subk">документов: ${s.count}</div>
+    </div>
+    <div class="kpi">
+      <div class="k">Накопленная прибыль</div>
+      <div class="v" style="color:${s.cumulative_profit >= 0 ? 'var(--grn)' : 'var(--red)'}">${money(s.cumulative_profit)} <small>${esc(cur)}</small></div>
+      <div class="subk">выручка − опер. расходы</div>
+    </div>
+    <div class="kpi">
+      <div class="k">Окупаемость (ROI)</div>
+      <div class="v">${s.payback_pct || 0}<small>%</small></div>
+      <div class="prog" style="max-width:none;margin-top:8px"><span style="width:${pctClamped}%;background:${pctClamped >= 100 ? 'var(--grn)' : 'var(--btn)'}"></span></div>
+    </div>
+    <div class="kpi">
+      <div class="k">Осталось окупить</div>
+      <div class="v">${money(s.remaining)} <small>${esc(cur)}</small></div>
+      <div class="subk">${s.remaining === 0 && s.total_invested > 0 ? 'Проект окупился' : 'до выхода в чистый плюс'}</div>
+    </div>`;
+
+  const renderBreakdown = (list, keyField, emptyText) => list.length
+    ? `<ul class="list">${list.map((x) => `
+      <li class="li">
+        <div class="l">
+          <div class="t">${esc(x[keyField])} <span class="small muted" style="font-weight:500">${x.share_pct}%</span></div>
+          <div class="prog"><span style="width:${Math.min(100, x.share_pct)}%"></span></div>
+        </div>
+        <div class="r"><b>${money(x.amount)}</b> <span class="small muted">${esc(cur)}</span></div>
+      </li>`).join('')}</ul>`
+    : `<div class="empty">${emptyText}</div>`;
+
+  $('inv-by-investor').innerHTML = renderBreakdown(by_investor, 'investor', 'Вложений ещё нет');
+  $('inv-by-cat').innerHTML = renderBreakdown(by_category, 'category', 'Вложений ещё нет');
+
+  $('inv-rows').innerHTML = items.map((x) => {
+    const cancelled = x.status === 'cancelled';
+    const meta = [
+      `<span class="badge b-director">${esc(x.category)}</span>`,
+      dm(x.doc_date),
+      x.investor ? `Инвестор: ${esc(x.investor)}` : '',
+      PAY_LABEL[x.payment_method] || x.payment_method,
+      x.doc_number ? `№ ${esc(x.doc_number)}` : '',
+    ].filter(Boolean).join(' · ');
+    return `
+      <div class="hi ${cancelled ? 'cancelled' : ''}" style="--tc:#1b1b1b;align-items:center">
+        <div class="bar" style="align-self:stretch"></div>
+        <div class="l" style="flex:1;min-width:0">
+          <div class="t">${esc(x.title)}</div>
+          <div class="s small muted">${meta}</div>
+          ${x.comment ? `<div class="small muted" style="margin-top:2px">${esc(x.comment)}</div>` : ''}
+          ${cancelled ? `<div class="small muted">отмена: ${esc(x.cancel_reason || '')}</div>` : ''}
+        </div>
+        <div class="r" style="display:flex;align-items:center;gap:6px;flex:none">
+          <span style="font-weight:700;white-space:nowrap">${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></span>
+          ${!cancelled ? moreBtnHtml(`data-inv-menu="${x.id}"`, 'Действия') : ''}
+        </div>
+      </div>`;
+  }).join('') || '<div class="empty">Записей об инвестициях пока нет. Нажмите «+ Вложение», чтобы внести стартовые расходы теплицы.</div>';
+
+  $('inv-rows').querySelectorAll('[data-inv-menu]').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const id = Number(b.dataset.invMenu);
+      openRowMenu(b, [
+        {
+          label: 'Отменить вложение',
+          danger: true,
+          onClick: async () => {
+            const reason = await deps.askText({ title: `Отменить вложение №${id}`, label: 'Причина отмены', placeholder: 'Укажите причину', okText: 'Отменить' });
+            if (!reason) return;
+            const r2 = await api('PATCH', '/api/report?resource=investments', { id, reason });
+            deps.toast(r2.ok ? 'Запись отменена' : errMsg(r2), !r2.ok);
+            if (r2.ok) loadInvestments();
+          },
+        },
+      ]);
+    };
+  });
+}
+
+export function initInvestments(config) {
+  deps = config;
+  $('inv-f-cat').innerHTML = INV_CATS.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  $('inv-open-add').onclick = openNewInvestment;
+  $('inv-back').onclick = () => showSubView('list');
+  $('inv-f-cancel').onclick = () => showSubView('list');
+
+  $('inv-f-pm').onclick = (e) => {
+    const b = e.target.closest('[data-pm]');
+    if (!b) return;
+    payMethod = b.dataset.pm;
+    document.querySelectorAll('#inv-f-pm .chip').forEach((c) => c.classList.toggle('sel', c === b));
+  };
+
+  $('inv-f-save').onclick = async () => {
+    const b = $('inv-f-save');
+    b.disabled = true;
+    try {
+      const r = await api('POST', '/api/report?resource=investments', {
+        doc_date: $('inv-f-date').value,
+        category: $('inv-f-cat').value,
+        title: $('inv-f-title').value,
+        investor: $('inv-f-investor').value,
+        amount: $('inv-f-amt').value,
+        payment_method: payMethod,
+        doc_number: $('inv-f-docno').value,
+        comment: $('inv-f-comment').value,
+      });
+      if (!r.ok) { $('inv-f-err').textContent = errMsg(r); return; }
+      deps.toast('Инвестиция записана');
+      await loadInvestments();
+    } finally {
+      b.disabled = false;
+    }
+  };
+}

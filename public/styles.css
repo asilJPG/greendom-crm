@@ -455,7 +455,25 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
 .u-av { width: 38px; height: 38px; border-radius: 50%; background: var(--soft2); color: var(--ink); font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex: none; }
 .pw-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--soft); border: 1px solid var(--line); }
 .pw-code { display: inline-block; margin-top: 2px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 14px; font-weight: 600; color: var(--ink); }
-@media (max-width: 640px) { .hide-sm { display: none; } }
+
+/* ───── Полноэкранные страницы документов и карточек (как в iiko / 1С) ───── */
+.back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 0; background: transparent; color: var(--ink2);
+  font-size: 14px; font-weight: 600; padding: 4px 0 8px; cursor: pointer;
+  transition: color .12s;
+}
+.back-btn:hover { color: var(--ink); }
+.click-card { cursor: pointer; transition: border-color .12s, background .12s; }
+.click-card:hover { border-color: rgba(0, 0, 0, .18); background: var(--soft); }
+.two-col { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+
+.doc-line { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+.dl-nums { display: grid; grid-template-columns: 78px 78px 1fr 1fr auto; gap: 8px; align-items: center; }
+@media (max-width: 640px) {
+  .dl-nums { grid-template-columns: 1fr 1fr; }
+  .hide-sm { display: none; }
+}
 
 /* широкий экран: закреплённая левая панель #f1f1f1 */
 @media (min-width: 1000px) {
