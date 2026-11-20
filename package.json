@@ -1,0 +1,18 @@
+{
+  "name": "teplica-cloud",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Облачная копия склада: приёмник данных от моноблока и сайт для просмотра",
+  "scripts": {
+    "test": "node --test test/cloud.test.js"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
