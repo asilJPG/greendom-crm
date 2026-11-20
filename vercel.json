@@ -1,8 +1,14 @@
 {
-  "cleanUrls": true,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/((?!api/|js/|styles\\.css|favicon\\.ico).*)", "destination": "/index.html" }
+    { "source": "/stock", "destination": "/index.html" },
+    { "source": "/report", "destination": "/index.html" },
+    { "source": "/history", "destination": "/index.html" },
+    { "source": "/intake", "destination": "/index.html" },
+    { "source": "/sale", "destination": "/index.html" },
+    { "source": "/writeoff", "destination": "/index.html" },
+    { "source": "/queue", "destination": "/index.html" },
+    { "source": "/users", "destination": "/index.html" },
+    { "source": "/log", "destination": "/index.html" }
   ],
   "headers": [
     {
