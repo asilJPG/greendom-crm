@@ -6,72 +6,97 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Склад: просмотр</title>
 <style>
-  :root { --bg:#f4f6f2; --card:#fff; --ink:#1b1f1a; --mut:#69705f; --ok:#2e7d32; --okbg:#e8f5e9; --warn:#b26a00; --bad:#b3261e; --badbg:#fdecea; --line:#dfe3da; --blue:#1a5fb4; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#12150f; --card:#1b1f17; --ink:#eef1ea; --mut:#9aa38f; --okbg:#1f3a22; --badbg:#3a1d1a; --line:#2e342a; } }
+  :root { color-scheme: light; --bg:#fff; --card:#fff; --ink:#1b2620; --mut:#66736b; --line:#e6e9e4; --line2:#d3d9d0;
+    --pri:#2c7a4e; --pri-d:#236340; --pri-bg:#e6f2ea; --bad:#b1362d; --bad-bg:#fbeae8; --warn:#a8650c; --warn-bg:#fcf0dc; --blue:#2a6aa8; --blue-bg:#e4edf7;
+    --shadow:0 1px 2px rgba(20,36,26,.05), 0 6px 18px rgba(20,36,26,.06); }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:system-ui,"Segoe UI",sans-serif; background:var(--bg); color:var(--ink); font-size:16px; }
+  body { margin:0; font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
   [hidden] { display:none !important; }
-  input, select, button { font:inherit; }
-  input, select { padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); width:100%; min-width:0; }
+  button, input, select { font:inherit; color:inherit; }
   button { cursor:pointer; }
-  .wrap { max-width:960px; margin:0 auto; padding:14px 14px 40px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:12px; overflow-x:auto; }
-  h2 { margin:0 0 10px; font-size:14px; color:var(--mut); font-weight:500; }
+  input, select { width:100%; min-width:0; padding:12px 14px; border:1px solid var(--line2); border-radius:12px; background:#fff; }
+  input:focus, select:focus { outline:none; border-color:var(--pri); box-shadow:0 0 0 3px rgba(44,122,78,.18); }
+  label.f { display:block; font-size:13px; color:var(--mut); margin:0 0 5px; }
+  h2 { margin:0 0 12px; font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--mut); font-weight:600; }
+  .wrap { max-width:1000px; margin:0 auto; padding:14px 16px 60px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; margin-bottom:14px; box-shadow:var(--shadow); overflow-x:auto; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  .btn { padding:12px 18px; border-radius:10px; border:0; background:var(--ok); color:#fff; }
-  .btn.sec { background:var(--card); color:var(--ink); border:1px solid var(--line); }
-  .btn.sm { padding:8px 12px; font-size:14px; }
-  .tabs { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
-  .tab { padding:12px 18px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
-  .tab.sel { background:var(--ok); color:#fff; border-color:var(--ok); }
+  .grow { flex:1 1 0; min-width:150px; }
+  .btn { padding:12px 20px; border-radius:12px; border:0; background:var(--pri); color:#fff; font-weight:600; }
+  .btn:hover { background:var(--pri-d); }
+  .btn.sec { background:#fff; color:var(--ink); border:1px solid var(--line2); font-weight:500; } .btn.sec:hover { background:var(--pri-bg); }
+  .btn.sm { padding:7px 12px; font-size:14px; border-radius:10px; }
+  .btn:disabled { background:var(--line); color:var(--mut); cursor:not-allowed; }
+  .tabs { display:flex; gap:6px; margin:12px 0; overflow-x:auto; }
+  .tab { flex:none; padding:10px 18px; border-radius:999px; border:1px solid transparent; background:transparent; color:var(--mut); font-weight:500; }
+  .tab:hover { background:var(--pri-bg); color:var(--ink); } .tab.sel { background:var(--pri); color:#fff; font-weight:600; }
   table { width:100%; border-collapse:collapse; font-size:15px; }
-  td, th { padding:8px 6px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+  th { font-size:12px; letter-spacing:.03em; text-transform:uppercase; color:var(--mut); font-weight:600; }
+  td, th { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+  tr:last-child td { border-bottom:0; }
   td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
   .muted { color:var(--mut); } .small { font-size:13px; }
   .top { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  .top .title { font-weight:600; font-size:19px; margin-right:auto; }
-  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background:var(--mut); }
-  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); }
-  .banner { background:var(--badbg); color:var(--bad); border:1px solid var(--bad); border-radius:12px; padding:10px 14px; margin-top:10px; }
-  .kpi { display:flex; gap:22px; flex-wrap:wrap; } .kpi b { font-size:22px; }
+  .logo { display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px; margin-right:auto; } .logo svg { width:26px; height:26px; color:var(--pri); }
+  .chipu { display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:999px; background:var(--pri-bg); font-size:14px; }
+  .av { width:26px; height:26px; border-radius:50%; background:var(--pri); color:#fff; display:grid; place-items:center; font-weight:700; font-size:13px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background:var(--mut); } .dot.ok { background:var(--pri); } .dot.bad { background:var(--bad); }
+  .banner { background:var(--bad-bg); color:var(--bad); border:1px solid rgba(177,54,45,.35); border-radius:12px; padding:10px 14px; margin-top:10px; }
+  .kpi { display:flex; gap:28px; flex-wrap:wrap; } .kpi div { color:var(--mut); font-size:14px; } .kpi b { display:block; font-size:24px; color:var(--ink); font-variant-numeric:tabular-nums; }
   .big { font-size:34px; font-weight:600; font-variant-numeric:tabular-nums; }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
-  .gcard { border:1px solid var(--line); border-radius:12px; padding:14px; background:var(--card); }
-  .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:13px; }
-  .b-in { background:var(--okbg); color:var(--ok); } .b-out { background:#e3edfb; color:var(--blue); } .b-writeoff { background:#fff3e0; color:var(--warn); }
+  .gcard { border:1px solid var(--line); border-radius:14px; padding:14px; background:#fff; box-shadow:var(--shadow); }
+  .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  .b-in, .b-admin { background:var(--pri-bg); color:var(--pri); } .b-out, .b-viewer { background:var(--blue-bg); color:var(--blue); } .b-writeoff, .b-off { background:var(--warn-bg); color:var(--warn); }
   tr.cancelled td { color:var(--mut); text-decoration:line-through; }
-  #login { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:20px; }
-  .err { color:var(--bad); min-height:22px; }
+  .center { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:20px; }
+  .err { color:var(--bad); min-height:22px; font-size:15px; }
+  .toast { position:fixed; left:50%; bottom:22px; transform:translate(-50%,20px); opacity:0; pointer-events:none; padding:12px 20px; border-radius:14px; background:var(--ink); color:#fff; transition:opacity .2s, transform .2s; z-index:50; max-width:90vw; }
+  .toast.show { opacity:1; transform:translate(-50%,0); } .toast.bad { background:var(--bad); }
+  dialog { border:0; border-radius:20px; padding:22px; width:min(440px,94vw); box-shadow:0 20px 60px rgba(0,0,0,.3); } dialog::backdrop { background:rgba(10,18,13,.5); }
+  dialog h3 { margin:0 0 14px; font-size:19px; } .field { margin-bottom:12px; }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="leaf" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2c3.6 0 7.5 1.6 8.8 5.4.9 2.8.2 6.6-2.5 9.7-2.1 2.4-5 3.9-8.3 3.9-1.2 0-2.2-.2-3.1-.5C5.8 18 5 16.5 5 14.7c0-2.5 1.4-4.4 3.2-6C10 7.1 11 5 12 2Z"/></symbol></svg>
 
-<div id="login" hidden>
-  <h1 style="margin:0">Склад: просмотр</h1>
-  <div class="card" style="width:min(360px,100%)">
-    <input id="pw" type="password" placeholder="Пароль" autocomplete="current-password" style="margin-bottom:10px">
-    <button class="btn" style="width:100%" id="go">Войти</button>
-    <div class="err" id="lerr" style="margin-top:8px"></div>
+<div class="center" id="login" hidden>
+  <div class="logo" style="margin:0;font-size:26px"><svg><use href="#leaf"/></svg> Склад: просмотр</div>
+  <div class="card" style="width:min(380px,100%)">
+    <div class="field"><label class="f" for="lg-name">Имя</label><input id="lg-name" autocomplete="username" autocapitalize="none"></div>
+    <div class="field"><label class="f" for="lg-pw">Пароль</label><input id="lg-pw" type="password" autocomplete="current-password"></div>
+    <button class="btn" style="width:100%" id="lg-go">Войти</button>
+    <div class="err" id="lg-err" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div class="center" id="force" hidden>
+  <div class="logo" style="margin:0;font-size:24px"><svg><use href="#leaf"/></svg> Задайте новый пароль</div>
+  <div class="muted" style="max-width:380px;text-align:center">Пароль был временным. Придумайте свой, не короче 8 символов.</div>
+  <div class="card" style="width:min(380px,100%)">
+    <div class="field"><input id="fc-old" type="password" placeholder="Временный пароль" autocomplete="current-password"></div>
+    <div class="field"><input id="fc-new" type="password" placeholder="Новый пароль" autocomplete="new-password"></div>
+    <div class="field"><input id="fc-new2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password"></div>
+    <button class="btn" style="width:100%" id="fc-go">Сохранить</button>
+    <div class="err" id="fc-err" style="margin-top:8px"></div>
   </div>
 </div>
 
 <div class="wrap" id="app" hidden>
   <div class="top">
-    <div class="title" id="title">Склад</div>
+    <div class="logo"><svg><use href="#leaf"/></svg><span id="title">Склад</span></div>
     <div class="small muted"><span class="dot" id="dot"></span><span id="seen">…</span></div>
+    <div class="chipu"><span class="av" id="av"></span><span><b id="who"></b> <span class="muted small" id="role"></span></span></div>
+    <button class="btn sec sm" id="chpw">Пароль</button>
     <button class="btn sec sm" id="logout">Выйти</button>
   </div>
   <div class="banner" id="stale" hidden>Моноблок давно не передавал данные. Цифры ниже могут быть неактуальны.</div>
-  <div class="tabs" id="tabs">
-    <button class="tab sel" data-tab="stock">Остатки</button>
-    <button class="tab" data-tab="report">Отчёт</button>
-    <button class="tab" data-tab="history">История</button>
-  </div>
+  <div class="tabs" id="tabs"></div>
 
   <div id="p-stock">
     <div class="card"><h2>Всего на складе</h2><div class="big"><span id="total">0</span> <span class="muted" style="font-size:18px">кг</span></div></div>
     <div class="grid" id="stock-cards"></div>
-    <div class="card" style="margin-top:12px"><h2>Таблица</h2>
+    <div class="card" style="margin-top:14px"><h2>Таблица</h2>
       <table><thead><tr><th>Сорт</th><th class="n">Приход</th><th class="n">Продано</th><th class="n">Списано</th><th class="n">Остаток</th></tr></thead><tbody id="stock-rows"></tbody></table></div>
   </div>
 
@@ -89,7 +114,28 @@
       <input id="h-day" type="date" style="width:auto"><button class="btn sec sm" id="h-all">Все дни</button></div></div>
     <div class="card"><table><thead><tr><th>Время</th><th>Операция</th><th>Сорт</th><th class="n">Нетто, кг</th><th>Кому / кто</th><th class="n">Сумма</th></tr></thead><tbody id="h-rows"></tbody></table></div>
   </div>
+
+  <div id="p-users" hidden>
+    <div class="card"><h2>Пользователи сайта</h2>
+      <table><thead><tr><th>Имя</th><th>Роль</th><th>Статус</th><th>Последний вход</th><th></th></tr></thead><tbody id="u-rows"></tbody></table></div>
+    <div class="card"><h2>Добавить пользователя</h2>
+      <div class="row"><input id="u-name" class="grow" placeholder="Имя (для входа)" autocapitalize="none"><input id="u-pw" class="grow" type="password" placeholder="Временный пароль, от 8 символов" autocomplete="new-password">
+        <select id="u-role" style="width:auto"><option value="viewer">Просмотр</option><option value="admin">Администратор</option></select><button class="btn" id="u-add">Добавить</button></div>
+      <div class="small muted" style="margin-top:8px">Человек войдёт с этим паролем и сразу выберет свой. «Просмотр» видит остатки, отчёты и историю; управлять пользователями может только администратор.</div>
+      <div class="err" id="u-err" style="margin-top:8px"></div></div>
+    <div class="card"><h2>Журнал входов и действий</h2>
+      <table><thead><tr><th>Время</th><th>Кто</th><th>Действие</th><th>Детали</th><th>IP</th></tr></thead><tbody id="a-rows"></tbody></table></div>
+  </div>
 </div>
+
+<dialog id="pw-dlg">
+  <h3 id="pd-title">Сменить пароль</h3>
+  <div class="field" id="pd-old-f"><label class="f">Текущий пароль</label><input id="pd-old" type="password" autocomplete="current-password"></div>
+  <div class="field"><label class="f" id="pd-new-l">Новый пароль (от 8 символов)</label><input id="pd-new" type="password" autocomplete="new-password"></div>
+  <div class="err" id="pd-err"></div>
+  <div class="row" style="justify-content:flex-end"><button class="btn sec" id="pd-cancel">Отмена</button><button class="btn" id="pd-ok">Сохранить</button></div>
+</dialog>
+<div class="toast" id="toast"></div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -98,50 +144,96 @@ const kg = v => (v == null ? '—' : Number(v).toFixed(3));
 const money = v => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 const iso = d => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const shift = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
-let cur = 'сум', tab = 'stock', timer = null;
+let cur = 'сум', tab = 'stock', timer = null, me = null, toastT = null;
 
-async function api(path, opts) {
-  const res = await fetch(path, opts); let data = null; try { data = await res.json(); } catch (e) {}
-  if (res.status === 401) { showLogin(); return { ok: false, data }; }
-  return { ok: res.ok, data };
+function toast(t, bad) { const e = $('toast'); e.textContent = t; e.className = 'toast show' + (bad ? ' bad' : ''); clearTimeout(toastT); toastT = setTimeout(() => e.className = 'toast', 3200); }
+async function call(method, path, body) {
+  const res = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  let data = null; try { data = await res.json(); } catch (e) {}
+  return { ok: res.ok, status: res.status, data };
 }
-function showLogin() { clearInterval(timer); $('app').hidden = true; $('login').hidden = false; $('pw').value = ''; }
-$('go').onclick = login; $('pw').onkeydown = e => { if (e.key === 'Enter') login(); };
+// Любой 401 возвращает на экран входа; 403 с must_change ведёт на экран смены пароля. Права проверяет сервер, здесь только отображение.
+async function api(method, path, body) {
+  const r = await call(method, path, body);
+  if (r.status === 401) { showLogin(); return { ok: false, data: r.data }; }
+  if (r.status === 403 && r.data && r.data.must_change) { showForce(); return { ok: false, data: r.data }; }
+  return r;
+}
+const msg = r => (r.data && r.data.error) || 'Ошибка';
+
+function show(which) { ['login', 'force', 'app'].forEach(k => $(k).hidden = k !== which); }
+function showLogin() { clearInterval(timer); me = null; show('login'); $('lg-pw').value = ''; }
+function showForce() { clearInterval(timer); show('force'); ['fc-old', 'fc-new', 'fc-new2'].forEach(i => $(i).value = ''); $('fc-err').textContent = ''; }
+
+/* ───── вход ───── */
+$('lg-go').onclick = login; $('lg-pw').onkeydown = e => { if (e.key === 'Enter') login(); };
 async function login() {
-  const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: $('pw').value }) });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { $('lerr').textContent = data.error || 'Ошибка'; return; }
-  $('lerr').textContent = ''; start();
+  const r = await call('POST', '/api/login', { name: $('lg-name').value, password: $('lg-pw').value });
+  if (!r.ok) { $('lg-err').textContent = msg(r); return; }
+  $('lg-err').textContent = ''; await start();
 }
-$('logout').onclick = async () => { await fetch('/api/logout', { method: 'POST' }); showLogin(); };
+$('logout').onclick = async () => { await call('POST', '/api/logout'); showLogin(); };
+$('fc-go').onclick = async () => {
+  if ($('fc-new').value !== $('fc-new2').value) { $('fc-err').textContent = 'Пароли не совпадают'; return; }
+  const r = await call('POST', '/api/password', { old_password: $('fc-old').value, new_password: $('fc-new').value });
+  if (!r.ok) { $('fc-err').textContent = msg(r); return; }
+  await start();
+};
 
+/* ───── смена пароля: свой или (админ) новый временный для другого ───── */
+let pwTarget = null;
+function openPw(target) {
+  pwTarget = target; $('pd-err').textContent = ''; $('pd-old').value = ''; $('pd-new').value = '';
+  $('pd-title').textContent = target ? `Новый временный пароль для «${target.name}»` : 'Сменить пароль';
+  $('pd-old-f').hidden = !!target; $('pd-new-l').textContent = target ? 'Временный пароль (от 8 символов)' : 'Новый пароль (от 8 символов)';
+  $('pw-dlg').showModal();
+}
+$('chpw').onclick = () => openPw(null);
+$('pd-cancel').onclick = () => $('pw-dlg').close();
+$('pd-ok').onclick = async () => {
+  const r = pwTarget ? await api('PATCH', '/api/users', { id: pwTarget.id, password: $('pd-new').value })
+                     : await api('POST', '/api/password', { old_password: $('pd-old').value, new_password: $('pd-new').value });
+  if (!r.ok) { $('pd-err').textContent = msg(r); return; }
+  $('pw-dlg').close(); toast(pwTarget ? 'Пароль задан, человек сменит его при входе' : 'Пароль изменён'); if (pwTarget) { loadUsers(); loadLog(); }
+};
+
+/* ───── старт и шапка ───── */
 async function start() {
-  const r = await api('/api/status'); if (!r.ok) return;
-  $('login').hidden = true; $('app').hidden = false;
-  paintStatus(r.data); go(tab);
-  clearInterval(timer); timer = setInterval(async () => { const s = await api('/api/status'); if (s.ok) paintStatus(s.data); if (tab === 'stock') loadStock(); }, 30000);
+  const r = await call('GET', '/api/status');
+  if (r.status === 401) return showLogin();
+  if (!r.ok) return toast(msg(r), true);
+  me = r.data.user;
+  if (me.must_change) return showForce();
+  show('app');
+  $('who').textContent = me.name; $('av').textContent = me.name.trim().charAt(0).toUpperCase(); $('role').textContent = me.role === 'admin' ? 'администратор' : 'просмотр';
+  buildTabs(); paintStatus(r.data); go(tab === 'users' && me.role !== 'admin' ? 'stock' : tab);
+  clearInterval(timer); timer = setInterval(async () => { const s = await api('GET', '/api/status'); if (s.ok) paintStatus(s.data); if (tab === 'stock') loadStock(); }, 30000);
 }
 function paintStatus(d) {
   const dev = d.devices[0];
   if (!dev) { $('seen').textContent = 'данных от моноблока ещё не было'; $('dot').className = 'dot bad'; $('stale').hidden = true; return; }
-  cur = dev.currency || 'сум';
-  $('title').textContent = 'Склад' + (dev.crop ? ' · ' + dev.crop : '');
+  cur = dev.currency || 'сум'; $('title').textContent = 'Склад' + (dev.crop ? ' · ' + dev.crop : '');
   const m = Math.floor(dev.seconds_ago / 60);
   $('seen').textContent = 'обновлено ' + (m < 1 ? 'только что' : m < 60 ? m + ' мин назад' : Math.floor(m / 60) + ' ч назад') + (dev.pending ? ` · в очереди ${dev.pending}` : '');
-  const stale = dev.seconds_ago > 900;
-  $('dot').className = 'dot ' + (stale ? 'bad' : 'ok'); $('stale').hidden = !stale;
+  const stale = dev.seconds_ago > 900; $('dot').className = 'dot ' + (stale ? 'bad' : 'ok'); $('stale').hidden = !stale;
 }
-document.querySelectorAll('.tab').forEach(b => b.onclick = () => go(b.dataset.tab));
+function buildTabs() {
+  const tabs = [['stock', 'Остатки'], ['report', 'Отчёт'], ['history', 'История']]; if (me.role === 'admin') tabs.push(['users', 'Пользователи']);
+  $('tabs').innerHTML = tabs.map(([id, n]) => `<button class="tab" data-tab="${id}">${n}</button>`).join('');
+  document.querySelectorAll('.tab').forEach(b => b.onclick = () => go(b.dataset.tab));
+}
 function go(id) {
-  tab = id;
-  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('sel', b.dataset.tab === id));
-  ['stock', 'report', 'history'].forEach(p => $('p-' + p).hidden = p !== id);
+  tab = id; document.querySelectorAll('.tab').forEach(b => b.classList.toggle('sel', b.dataset.tab === id));
+  ['stock', 'report', 'history', 'users'].forEach(p => $('p-' + p).hidden = p !== id);
   if (id === 'stock') loadStock();
   if (id === 'report') { if (!$('r-from').value) { $('r-from').value = iso(new Date()); $('r-to').value = iso(new Date()); } loadReport(); }
   if (id === 'history') loadHistory();
+  if (id === 'users') { loadUsers(); loadLog(); }
 }
+
+/* ───── данные склада ───── */
 async function loadStock() {
-  const r = await api('/api/stock'); if (!r.ok) return; const d = r.data;
+  const r = await api('GET', '/api/stock'); if (!r.ok) return; const d = r.data;
   $('total').textContent = kg(d.total_kg);
   $('stock-cards').innerHTML = d.rows.map(x => `<div class="gcard"><div class="muted">${esc(x.grade)}</div><div class="big">${kg(x.balance_kg)}</div><div class="small muted">кг на складе</div></div>`).join('');
   $('stock-rows').innerHTML = d.rows.map(x => `<tr><td>${esc(x.grade)}</td><td class="n">${kg(x.in_kg)}</td><td class="n">${kg(x.out_kg)}</td><td class="n">${kg(x.writeoff_kg)}</td><td class="n"><b>${kg(x.balance_kg)}</b></td></tr>`).join('');
@@ -149,13 +241,12 @@ async function loadStock() {
 document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => { $('r-from').value = shift(+b.dataset.range); $('r-to').value = iso(new Date()); loadReport(); });
 $('r-go').onclick = loadReport;
 async function loadReport() {
-  const r = await api(`/api/report?from=${$('r-from').value}&to=${$('r-to').value}`); if (!r.ok) return; const d = r.data;
+  const r = await api('GET', `/api/report?from=${$('r-from').value}&to=${$('r-to').value}`); if (!r.ok) return; const d = r.data;
   const sum = k => d.by_grade.reduce((a, x) => a + x[k], 0), tOut = sum('out_kg'), tAmt = sum('amount');
   const tbl = (head, rows) => `<table><thead><tr>${head.map((h, i) => `<th class="${i ? 'n' : ''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${head.length}" class="muted">Нет данных</td></tr>`}</tbody></table>`;
   $('r-body').innerHTML = `
-   <div class="card"><div class="kpi"><div>Приход<br><b>${kg(sum('in_kg'))}</b> кг</div><div>Продано<br><b>${kg(tOut)}</b> кг</div><div>Выручка<br><b>${money(tAmt)}</b> ${esc(cur)}</div>
-     <div>Средняя цена<br><b>${tOut ? money(tAmt / tOut) : '—'}</b> ${esc(cur)}/кг</div><div>Списано<br><b>${kg(sum('writeoff_kg'))}</b> кг</div></div>
-     <div class="muted small" style="margin-top:8px">Ручных записей веса: ${d.manual_entries} · отменённых операций: ${d.cancelled_entries}</div></div>
+   <div class="card"><div class="kpi"><div>Приход<b>${kg(sum('in_kg'))} кг</b></div><div>Продано<b>${kg(tOut)} кг</b></div><div>Выручка<b>${money(tAmt)} ${esc(cur)}</b></div><div>Средняя цена<b>${tOut ? money(tAmt / tOut) : '—'} ${esc(cur)}/кг</b></div><div>Списано<b>${kg(sum('writeoff_kg'))} кг</b></div></div>
+     <div class="muted small" style="margin-top:10px">Ручных записей веса: ${d.manual_entries} · отменённых операций: ${d.cancelled_entries}</div></div>
    <div class="card"><h2>По сортам</h2>${tbl(['Сорт', 'Приход, кг', 'Продано, кг', 'Списано, кг', `Выручка, ${cur}`], d.by_grade.map(x => `<tr><td>${esc(x.grade)}</td><td class="n">${kg(x.in_kg)}</td><td class="n">${kg(x.out_kg)}</td><td class="n">${kg(x.writeoff_kg)}</td><td class="n">${money(x.amount)}</td></tr>`))}</div>
    <div class="card"><h2>По дням</h2>${tbl(['День', 'Приход, кг', 'Продано, кг', `Выручка, ${cur}`], d.by_day.map(x => `<tr><td>${esc(x.day)}</td><td class="n">${kg(x.in_kg)}</td><td class="n">${kg(x.out_kg)}</td><td class="n">${money(x.amount)}</td></tr>`))}</div>
    <div class="card"><h2>Кто сколько собрал</h2>${tbl(['Работник', 'Ящиков', 'Нетто, кг'], d.by_worker.map(x => `<tr><td>${esc(x.worker)}</td><td class="n">${x.crates}</td><td class="n">${kg(x.kg)}</td></tr>`))}</div>
@@ -164,13 +255,43 @@ async function loadReport() {
 const TYPE = { in: ['Приход', 'b-in'], out: ['Продажа', 'b-out'], writeoff: ['Списание', 'b-writeoff'] };
 $('h-type').onchange = loadHistory; $('h-day').onchange = loadHistory; $('h-all').onclick = () => { $('h-day').value = ''; loadHistory(); };
 async function loadHistory() {
-  const r = await api(`/api/movements?type=${$('h-type').value}&day=${$('h-day').value}&limit=200`); if (!r.ok) return;
+  const r = await api('GET', `/api/movements?type=${$('h-type').value}&day=${$('h-day').value}&limit=200`); if (!r.ok) return;
   $('h-rows').innerHTML = r.data.map(m => {
-    const [tn, tc] = TYPE[m.type]; const who = m.type === 'out' ? (m.customer || '') : m.type === 'in' ? (m.worker || '') : (m.note || '');
+    const [tn, tc] = TYPE[m.type], who = m.type === 'out' ? (m.customer || '') : m.type === 'in' ? (m.worker || '') : (m.note || '');
     return `<tr class="${m.status === 'cancelled' ? 'cancelled' : ''}"><td>${esc(m.ts.slice(5, 16))}</td><td><span class="badge ${tc}">${tn}</span></td><td>${esc(m.grade)}</td><td class="n">${kg(m.net_kg)}${m.manual ? ' *' : ''}</td><td>${esc(who)}${m.status === 'cancelled' ? ` <span class="small">(отмена: ${esc(m.cancel_reason || '')})</span>` : ''}</td><td class="n">${m.type === 'out' ? money(m.amount) : ''}</td></tr>`;
   }).join('') || '<tr><td colspan="6" class="muted">Записей нет</td></tr>';
 }
-(async () => { const r = await api('/api/status'); if (r.ok) start(); else showLogin(); })();
+
+/* ───── пользователи (только админ; все проверки повторяет сервер) ───── */
+async function loadUsers() {
+  const r = await api('GET', '/api/users'); if (!r.ok) return;
+  $('u-rows').innerHTML = '';
+  r.data.forEach(u => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${esc(u.name)}</b>${u.must_change ? ' <span class="small muted">(ещё не сменил пароль)</span>' : ''}</td>
+      <td><span class="badge b-${u.role}">${u.role === 'admin' ? 'админ' : 'просмотр'}</span></td><td>${u.active ? 'работает' : '<span class="badge b-off">отключён</span>'}</td><td class="small">${esc(u.last_login || '—')}</td>
+      <td style="white-space:nowrap"><button class="btn sec sm" data-a="name">Имя</button> <button class="btn sec sm" data-a="role">${u.role === 'admin' ? 'В просмотр' : 'В админы'}</button> <button class="btn sec sm" data-a="pw">Новый пароль</button> <button class="btn sec sm" data-a="active">${u.active ? 'Отключить' : 'Включить'}</button></td>`;
+    tr.querySelectorAll('button').forEach(b => b.onclick = async () => {
+      if (b.dataset.a === 'pw') return openPw(u);
+      const patch = { id: u.id };
+      if (b.dataset.a === 'name') { const n = prompt('Новое имя:', u.name); if (!n) return; patch.name = n; }
+      if (b.dataset.a === 'role') patch.role = u.role === 'admin' ? 'viewer' : 'admin';
+      if (b.dataset.a === 'active') patch.active = !u.active;
+      const r2 = await api('PATCH', '/api/users', patch); toast(r2.ok ? 'Сохранено' : msg(r2), !r2.ok); loadUsers(); loadLog();
+    });
+    $('u-rows').appendChild(tr);
+  });
+}
+$('u-add').onclick = async () => {
+  const r = await api('POST', '/api/users', { name: $('u-name').value, password: $('u-pw').value, role: $('u-role').value });
+  if (!r.ok) { $('u-err').textContent = msg(r); return; }
+  $('u-err').textContent = ''; $('u-name').value = ''; $('u-pw').value = ''; toast('Пользователь добавлен'); loadUsers(); loadLog();
+};
+async function loadLog() {
+  const r = await api('GET', '/api/users?log=1'); if (!r.ok) return;
+  $('a-rows').innerHTML = r.data.map(a => `<tr><td class="small">${esc(a.ts.slice(5, 16))}</td><td>${esc(a.user_name || '—')}</td><td>${esc(a.action)}</td><td class="small">${esc(a.detail)}</td><td class="small muted">${esc(a.ip || '')}</td></tr>`).join('');
+}
+start();
 </script>
 </body>
 </html>

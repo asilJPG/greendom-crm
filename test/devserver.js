@@ -6,7 +6,7 @@ const path = require('path');
 const { PGlite } = require('@electric-sql/pglite');
 
 process.env.INGEST_TOKEN = process.env.INGEST_TOKEN || 'dev-ingest-token-0123456789abcdef';
-process.env.DASHBOARD_PASSWORDS = process.env.DASHBOARD_PASSWORDS || 'dev-password-1234';
+process.env.SETUP_KEY = process.env.SETUP_KEY || 'dev-setup-key-0123456789abcdef';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-0123456789abcdef';
 
 const pg = new PGlite();
