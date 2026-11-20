@@ -409,6 +409,52 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
 .bal-pill.pos { background: var(--grn-bg); color: var(--grn); }
 .bal-pill.neg { background: var(--red-bg); color: var(--red); }
 .bal-pill.zero { background: var(--soft2); color: var(--mut); }
+
+/* ───── Профессиональные строки списков, кнопка редактирования и контекстное меню ───── */
+.row-act-btn {
+  width: 36px; height: 36px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px; border: 1px solid transparent;
+  background: transparent; color: var(--ink2); cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.row-act-btn:hover { background: var(--soft2); border-color: var(--line); color: var(--ink); }
+.row-act-btn:active { transform: scale(.96); }
+.row-act-btn svg { width: 17px; height: 17px; }
+
+.li-edit { cursor: pointer; border-radius: 10px; padding: 11px 8px; margin: 0 -8px; transition: background .12s; }
+.li-edit:hover { background: var(--soft); }
+.li-edit.off { opacity: .58; }
+
+.btn.ghost { background: transparent; color: var(--ink2); border: 1px solid transparent; padding: 8px 12px; }
+.btn.ghost:hover { background: var(--soft2); color: var(--ink); }
+.btn.ghost.danger { color: var(--red); }
+.btn.ghost.danger:hover { background: var(--red-bg); color: var(--red); }
+
+.dlg-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+
+.act-menu {
+  position: fixed; z-index: 90; min-width: 185px;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  padding: 5px; box-shadow: 0 12px 32px rgba(0, 0, 0, .14), 0 2px 6px rgba(0, 0, 0, .06);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.act-menu-item {
+  width: 100%; text-align: left; border: 0; background: transparent;
+  padding: 9px 12px; border-radius: 8px; font-size: 14px; font-weight: 500;
+  color: var(--ink); cursor: pointer; transition: background .1s;
+}
+.act-menu-item:hover { background: var(--soft2); }
+.act-menu-item.danger { color: var(--red); }
+.act-menu-item.danger:hover { background: var(--red-bg); }
+
+.u-row { display: flex; align-items: center; gap: 12px; padding: 12px 8px; margin: 0 -8px; border-bottom: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: background .12s; }
+.u-row:last-child { border-bottom: 0; }
+.u-row:hover { background: var(--soft); }
+.u-row.off { opacity: .6; }
+.u-av { width: 38px; height: 38px; border-radius: 50%; background: var(--soft2); color: var(--ink); font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex: none; }
+.pw-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--soft); border: 1px solid var(--line); }
+.pw-code { display: inline-block; margin-top: 2px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 14px; font-weight: 600; color: var(--ink); }
 @media (max-width: 640px) { .hide-sm { display: none; } }
 
 /* широкий экран: закреплённая левая панель #f1f1f1 */

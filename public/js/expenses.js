@@ -1,5 +1,6 @@
 // Модуль «Расходы»: акты расхода и управление категориями (аналог акта приёма услуг / расходов в 1С и iiko).
 import { api, errMsg } from './api.js';
+import { editBtnHtml, moreBtnHtml, openEntityModal, openRowMenu } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -35,32 +36,43 @@ function renderCategoriesSelects() {
 
 function renderCategoryModal() {
   $('exp-cat-list').innerHTML = categories.map((c) => `
-    <li class="li">
+    <li class="li li-edit${c.active ? '' : ' off'}" data-edit-cat="${c.id}">
       <div class="l">
-        <div class="t">${esc(c.name)} ${c.active ? '' : '<span class="badge b-off">скрыта</span>'}</div>
+        <div class="t" style="display:flex;align-items:center;gap:8px">
+          <span>${esc(c.name)}</span>
+          ${c.active ? '' : '<span class="badge b-off">Скрыта</span>'}
+        </div>
       </div>
-      <div style="display:flex;gap:6px;flex:none">
-        <button class="btn sec sm" data-c-act="rename" data-id="${c.id}">Имя</button>
-        <button class="btn sec sm" data-c-act="toggle" data-id="${c.id}">${c.active ? 'Скрыть' : 'Вернуть'}</button>
-      </div>
+      ${editBtnHtml(`data-edit-cat="${c.id}"`, 'Редактировать категорию')}
     </li>`).join('') || '<div class="empty">Категорий нет</div>';
 
-  $('exp-cat-list').querySelectorAll('[data-c-act]').forEach((b) => {
-    b.onclick = async () => {
-      const cat = categories.find((x) => String(x.id) === b.dataset.id);
+  $('exp-cat-list').querySelectorAll('li[data-edit-cat]').forEach((li) => {
+    li.onclick = () => {
+      const cat = categories.find((x) => String(x.id) === li.dataset.editCat);
       if (!cat) return;
-      const patch = { target: 'category', id: cat.id };
-      if (b.dataset.cAct === 'rename') {
-        const n = await deps.askText({ title: 'Переименовать категорию', label: 'Новое название', value: cat.name });
-        if (!n) return;
-        patch.name = n;
-      } else {
-        patch.active = !cat.active;
-      }
-      const r = await api('PATCH', '/api/report?resource=expenses', patch);
-      deps.toast(r.ok ? 'Сохранено' : errMsg(r), !r.ok);
-      if (r.ok) await loadExpenses();
-      renderCategoryModal();
+      openEntityModal({
+        title: 'Редактировать категорию',
+        active: !!cat.active,
+        archiveLabel: 'Скрыть категорию',
+        restoreLabel: 'Вернуть в список',
+        fields: [{ key: 'name', label: 'Название категории', value: cat.name, required: true }],
+        onSave: async (vals) => {
+          const r = await api('PATCH', '/api/report?resource=expenses', { target: 'category', id: cat.id, name: vals.name });
+          if (!r.ok) return errMsg(r);
+          deps.toast('Категория обновлена');
+          await loadExpenses();
+          renderCategoryModal();
+          return true;
+        },
+        onToggleActive: async (nextActive) => {
+          const r = await api('PATCH', '/api/report?resource=expenses', { target: 'category', id: cat.id, active: nextActive });
+          if (!r.ok) return errMsg(r);
+          deps.toast(nextActive ? 'Категория возвращена' : 'Категория скрыта');
+          await loadExpenses();
+          renderCategoryModal();
+          return true;
+        },
+      });
     };
   });
 }
@@ -98,25 +110,37 @@ export async function loadExpenses() {
       x.user_name ? esc(x.user_name) : '',
     ].filter(Boolean).join(' · ');
     return `
-      <div class="hi ${cancelled ? 'cancelled' : ''}" style="--tc:#1b1b1b">
-        <div class="bar"></div>
+      <div class="hi ${cancelled ? 'cancelled' : ''}" style="--tc:#1b1b1b;align-items:center">
+        <div class="bar" style="align-self:stretch"></div>
         <div class="l" style="flex:1;min-width:0">
           <div class="t">Акт №${x.id}${x.comment ? ' · ' + esc(x.comment) : ''}</div>
           <div class="s small muted">${meta}</div>
           ${cancelled ? `<div class="small muted">отмена: ${esc(x.cancel_reason || '')}</div>` : ''}
-          ${canCancel ? `<div class="acts"><button class="btn sec sm" data-exp-cancel="${x.id}">Отменить акт</button></div>` : ''}
         </div>
-        <div class="r" style="font-weight:700;white-space:nowrap">${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></div>
+        <div class="r" style="display:flex;align-items:center;gap:6px;flex:none">
+          <span style="font-weight:700;white-space:nowrap">${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></span>
+          ${canCancel ? moreBtnHtml(`data-exp-menu="${x.id}"`, 'Действия с актом') : ''}
+        </div>
       </div>`;
   }).join('') || '<div class="empty">Расходов за выбранный период нет</div>';
 
-  $('e-rows').querySelectorAll('[data-exp-cancel]').forEach((b) => {
-    b.onclick = async () => {
-      const reason = await deps.askText({ title: `Отменить акт №${b.dataset.expCancel}`, label: 'Причина отмены', placeholder: 'Укажите причину', okText: 'Отменить акт' });
-      if (!reason) return;
-      const r2 = await api('PATCH', '/api/report?resource=expenses', { target: 'expense', id: Number(b.dataset.expCancel), reason });
-      deps.toast(r2.ok ? 'Акт отменён' : errMsg(r2), !r2.ok);
-      if (r2.ok) loadExpenses();
+  $('e-rows').querySelectorAll('[data-exp-menu]').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const id = Number(b.dataset.expMenu);
+      openRowMenu(b, [
+        {
+          label: 'Отменить акт',
+          danger: true,
+          onClick: async () => {
+            const reason = await deps.askText({ title: `Отменить акт №${id}`, label: 'Причина отмены', placeholder: 'Укажите причину', okText: 'Отменить акт' });
+            if (!reason) return;
+            const r2 = await api('PATCH', '/api/report?resource=expenses', { target: 'expense', id, reason });
+            deps.toast(r2.ok ? 'Акт отменён' : errMsg(r2), !r2.ok);
+            if (r2.ok) loadExpenses();
+          },
+        },
+      ]);
     };
   });
 }

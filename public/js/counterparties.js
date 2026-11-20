@@ -1,5 +1,6 @@
 // Модуль «Контрагенты и Акт сверки»: список контрагентов, взаиморасчёты, оплаты и печатный/PNG Акт сверки.
 import { api, errMsg } from './api.js';
+import { editBtnHtml } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -92,13 +93,14 @@ function renderList() {
             ${stats ? `<div class="small muted" style="margin-top:4px">${stats}</div>` : ''}
             ${c.note ? `<div class="small muted" style="margin-top:2px">${esc(c.note)}</div>` : ''}
           </div>
-          <div style="flex:none">${balBadge}</div>
+          <div style="display:flex;align-items:center;gap:6px;flex:none">
+            ${balBadge}
+            ${editBtnHtml(`data-cp-act="edit" data-id="${c.id}"`, 'Редактировать контрагента')}
+          </div>
         </div>
         <div class="acts" style="margin-top:10px">
           <button class="btn sm" data-cp-act="rec" data-id="${c.id}">Акт сверки</button>
           <button class="btn sec sm" data-cp-act="pay" data-id="${c.id}">+ Оплата</button>
-          <button class="btn sec sm" data-cp-act="edit" data-id="${c.id}">Изменить</button>
-          <button class="btn sec sm" data-cp-act="toggle" data-id="${c.id}">${c.active ? 'Скрыть' : 'Вернуть'}</button>
         </div>
       </div>`;
   }).join('') || '<div class="empty">Контрагентов пока нет</div>';
@@ -111,11 +113,6 @@ function renderList() {
       if (act === 'rec') return openReconcile(c.name);
       if (act === 'pay') return openPayment(c);
       if (act === 'edit') return openCpModal(c);
-      if (act === 'toggle') {
-        const r = await api('PATCH', '/api/status?resource=refs', { target: 'customer', id: c.id, active: !c.active });
-        deps.toast(r.ok ? 'Сохранено' : errMsg(r), !r.ok);
-        if (r.ok) { await loadCounterparties(); await deps.onRefsChanged(); }
-      }
     };
   });
 }
@@ -137,6 +134,14 @@ function openCpModal(c = null) {
   $('cp-f-phone').value = c ? (c.phone || '') : '';
   $('cp-f-note').value = c ? (c.note || '') : '';
   $('cp-f-err').textContent = '';
+  const tog = $('cp-f-toggle');
+  if (tog) {
+    tog.hidden = !c;
+    if (c) {
+      tog.textContent = c.active ? 'Скрыть' : 'Вернуть';
+      tog.className = c.active ? 'btn ghost danger' : 'btn ghost';
+    }
+  }
   $('cp-dlg').showModal();
   $('cp-f-name').focus();
 }
@@ -386,6 +391,21 @@ export function initCounterparties(config) {
 
   // Сохранение контрагента
   $('cp-f-cancel').onclick = () => $('cp-dlg').close();
+  $('cp-f-toggle').onclick = async () => {
+    if (!editTarget) return;
+    const b = $('cp-f-toggle');
+    b.disabled = true;
+    try {
+      const r = await api('PATCH', '/api/status?resource=refs', { target: 'customer', id: editTarget.id, active: !editTarget.active });
+      if (!r.ok) { $('cp-f-err').textContent = errMsg(r); return; }
+      $('cp-dlg').close();
+      deps.toast(editTarget.active ? 'Контрагент скрыт' : 'Контрагент возвращён');
+      await loadCounterparties();
+      await deps.onRefsChanged();
+    } finally {
+      b.disabled = false;
+    }
+  };
   $('cp-f-save').onclick = async () => {
     const b = $('cp-f-save');
     b.disabled = true;

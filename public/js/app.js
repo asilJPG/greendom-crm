@@ -6,6 +6,7 @@ import { initInvoice, openInvoice } from './invoice.js';
 import { initExpenses, loadExpenses } from './expenses.js';
 import { initRefs, loadRefs } from './refs.js';
 import { initCounterparties, loadCounterparties } from './counterparties.js';
+import { editBtnHtml, moreBtnHtml, openRowMenu } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -397,16 +398,57 @@ function renderSaleCart() {
 }
 
 /* ───── история ───── */
-function rowActions(m) {
-  if (m.status === 'cancelled' || !state.me) return '';
-  const key = `${m.device}:${m.id}`;
-  state.histMap[key] = m;
+function hasRowActions(m) {
+  if (m.status === 'cancelled' || !state.me) return false;
   const mine = state.me.role === 'keeper' && m.user_name === state.me.name && m.ts.slice(0, 10) === iso(new Date());
-  const btns = [];
-  if (m.type === 'out') btns.push(`<button class="btn sec sm" data-a="inv" data-k="${esc(key)}">Накладная</button>`);
-  if (state.me.role === 'admin' || mine) btns.push(`<button class="btn sec sm" data-a="cancel" data-k="${esc(key)}">Отменить${m.sale_id ? ' продажу' : ''}</button>`);
-  if (state.me.role === 'admin') btns.push(`<button class="btn sec sm" data-a="edit" data-k="${esc(key)}">Исправить</button>`);
-  return btns.length ? `<div class="acts">${btns.join('')}</div>` : '';
+  return m.type === 'out' || state.me.role === 'admin' || mine;
+}
+
+function buildHistMenuItems(m) {
+  const mine = state.me.role === 'keeper' && m.user_name === state.me.name && m.ts.slice(0, 10) === iso(new Date());
+  const items = [];
+  if (m.type === 'out') {
+    items.push({
+      label: 'Накладная',
+      onClick: () => {
+        const list = m.sale_id
+          ? state.histRows.filter((x) => x.device === m.device && x.sale_id === m.sale_id && x.status === 'active')
+          : [m];
+        const sale = {
+          device: m.device,
+          sale_id: m.sale_id || m.id,
+          ts: m.ts,
+          customer: m.customer || '—',
+          user_name: m.user_name || '',
+          note: m.note || '',
+          total_kg: Math.round(list.reduce((a, i) => a + Number(i.net_kg || 0), 0) * 1000) / 1000,
+          total_amount: Math.round(list.reduce((a, i) => a + Number(i.amount || 0), 0) * 100) / 100,
+          items: list,
+        };
+        openInvoice(sale, { crop: state.crop, cur: state.cur });
+      },
+    });
+  }
+  if (state.me.role === 'admin') {
+    items.push({ label: 'Исправить запись', onClick: () => openEdit(m) });
+  }
+  if (state.me.role === 'admin' || mine) {
+    items.push({
+      label: m.sale_id ? 'Отменить продажу' : 'Отменить запись',
+      danger: true,
+      onClick: async () => {
+        const reason = await askText({
+          title: m.sale_id ? 'Отменить продажу' : 'Отменить запись',
+          label: 'Причина отмены',
+          placeholder: 'Укажите причину',
+          okText: 'Отменить',
+        });
+        if (!reason) return;
+        await sendCmd(m.sale_id ? 'cancel_sale' : 'cancel_movement', { id: m.sale_id || m.id, device: m.device, reason });
+      },
+    });
+  }
+  return items;
 }
 
 async function loadHistory() {
@@ -418,68 +460,116 @@ async function loadHistory() {
     const [tn, tc, col] = TYPE_META[m.type];
     const who = m.type === 'out' ? (m.customer || '') : m.type === 'in' ? (m.worker || '') : (m.note || '');
     const cancelled = m.status === 'cancelled';
-    return `<div class="hi ${cancelled ? 'cancelled' : ''}" style="--tc:${col}"><div class="bar"></div><div class="l" style="flex:1;min-width:0">` +
+    const key = `${m.device}:${m.id}`;
+    const canAct = hasRowActions(m);
+    if (canAct) state.histMap[key] = m;
+    return `<div class="hi ${cancelled ? 'cancelled' : ''}" style="--tc:${col};align-items:center"><div class="bar" style="align-self:stretch"></div><div class="l" style="flex:1;min-width:0">` +
       `<div class="t" style="font-weight:600">${esc(m.grade)} · ${kg(m.net_kg)} кг${m.manual ? ' *' : ''}</div>` +
       `<div class="s small muted"><span class="badge ${tc}">${tn}</span> ${dm(m.ts.slice(0, 10))} ${esc(m.ts.slice(11, 16))}${who ? ' · ' + esc(who) : ''}</div>` +
-      `${cancelled ? `<div class="small muted">отмена: ${esc(m.cancel_reason || '')}</div>` : ''}${rowActions(m)}</div>` +
-      `<div class="r" style="font-weight:700;white-space:nowrap">${m.type === 'out' ? money(m.amount) : ''}</div></div>`;
+      `${cancelled ? `<div class="small muted">отмена: ${esc(m.cancel_reason || '')}</div>` : ''}</div>` +
+      `<div class="r" style="display:flex;align-items:center;gap:6px;flex:none">` +
+      `${m.type === 'out' ? `<span style="font-weight:700;white-space:nowrap">${money(m.amount)}</span>` : ''}` +
+      `${canAct ? moreBtnHtml(`data-hm="${esc(key)}"`, 'Действия с записью') : ''}</div></div>`;
   }).join('') || '<div class="empty">Записей нет</div>';
 }
 
 /* ───── сотрудники и журнал (админ) ───── */
+let editUserTarget = null;
+
+function openUserEdit(u) {
+  editUserTarget = u;
+  let pwShown = false;
+  $('ue-title').textContent = u.name;
+  $('ue-sub').textContent = `Последний вход: ${u.last_login || 'ещё не входил'}`;
+  $('ue-name').value = u.name;
+  $('ue-role').value = u.role;
+  $('ue-new-pw').value = '';
+  $('ue-err').textContent = '';
+
+  const pwBox = $('ue-pw-box');
+  const pwVal = $('ue-pw-val');
+  const pwShow = $('ue-pw-show');
+  const pwCopy = $('ue-pw-copy');
+  if (u.password) {
+    pwBox.hidden = false;
+    pwVal.textContent = '••••••';
+    pwShow.textContent = 'Показать';
+    pwCopy.hidden = true;
+    pwShow.onclick = () => {
+      pwShown = !pwShown;
+      pwVal.textContent = pwShown ? u.password : '••••••';
+      pwShow.textContent = pwShown ? 'Скрыть' : 'Показать';
+      pwCopy.hidden = !pwShown;
+    };
+    pwCopy.onclick = () => {
+      navigator.clipboard?.writeText(u.password).then(() => toast('Пароль скопирован')).catch(() => {});
+    };
+  } else {
+    pwBox.hidden = true;
+  }
+
+  const tog = $('ue-toggle');
+  tog.textContent = u.active ? 'Отключить доступ' : 'Включить доступ';
+  tog.className = u.active ? 'btn ghost danger' : 'btn ghost';
+  tog.onclick = async () => {
+    tog.disabled = true;
+    try {
+      const r = await api('PATCH', '/api/users', { id: u.id, active: !u.active });
+      if (!r.ok) { $('ue-err').textContent = errMsg(r); return; }
+      $('u-edit-dlg').close();
+      toast(u.active ? 'Сотрудник отключён' : 'Сотрудник включён');
+      loadUsers();
+    } finally {
+      tog.disabled = false;
+    }
+  };
+
+  $('ue-cancel').onclick = () => $('u-edit-dlg').close();
+  $('ue-save').onclick = async () => {
+    const b = $('ue-save');
+    const name = $('ue-name').value.trim();
+    const role = $('ue-role').value;
+    const password = $('ue-new-pw').value;
+    if (!name) { $('ue-err').textContent = 'Укажите имя'; return; }
+    const patch = { id: u.id };
+    if (name !== u.name) patch.name = name;
+    if (role !== u.role) patch.role = role;
+    if (password) patch.password = password;
+    if (Object.keys(patch).length === 1) { $('u-edit-dlg').close(); return; }
+    b.disabled = true;
+    try {
+      const r = await api('PATCH', '/api/users', patch);
+      if (!r.ok) { $('ue-err').textContent = errMsg(r); return; }
+      $('u-edit-dlg').close();
+      toast('Изменения сохранены');
+      loadUsers();
+    } finally {
+      b.disabled = false;
+    }
+  };
+
+  $('u-edit-dlg').showModal();
+  $('ue-name').focus();
+}
+
 async function loadUsers() {
   const r = await api('GET', '/api/users');
   if (!r.ok) return;
   $('u-rows').innerHTML = '';
   r.data.forEach((u) => {
     const el = document.createElement('div');
-    el.className = 'li';
-    el.style.cssText = 'display:block';
-    const pwHtml = u.password
-      ? `<span class="small muted" style="margin-left:4px">· пароль: <code class="pw-val" style="font-family:ui-monospace,monospace;background:var(--soft);padding:2px 6px;border-radius:6px;cursor:pointer" title="Нажмите, чтобы скопировать">••••••</code></span>`
-      : `<span class="small muted" style="margin-left:4px">· пароль не сохранён (задайте новый или войдите)</span>`;
+    el.className = `u-row${u.active ? '' : ' off'}`;
+    const initial = (u.name || '?').trim().charAt(0).toUpperCase();
     el.innerHTML =
+      `<div class="u-av">${esc(initial)}</div>` +
+      `<div style="flex:1;min-width:0">` +
       `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(u.name)}</b>` +
       `<span class="badge b-${u.role}">${ROLE_NAME[u.role] || u.role}</span>` +
-      `${u.active ? '<span class="badge b-active">Активен</span>' : '<span class="badge b-off">Отключён</span>'}</div>` +
-      `<div class="s small muted" style="margin-top:4px">вход: ${esc(u.last_login || '—')}${pwHtml}</div>` +
-      `<div class="acts">${u.password ? '<button class="btn sec sm" data-a="showpw">Показать пароль</button>' : ''}<button class="btn sec sm" data-a="name">Имя</button>` +
-      `<select class="rolesel" aria-label="Роль" style="width:auto;min-height:34px;padding:6px 10px;font-size:13.5px;border-radius:9px">` +
-      `${Object.entries(ROLE_NAME).map(([k, v]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${v}</option>`).join('')}</select>` +
-      `<button class="btn sec sm" data-a="pw">Новый пароль</button>` +
-      `<button class="btn sec sm" data-a="active">${u.active ? 'Отключить' : 'Включить'}</button></div>`;
-    let pwShown = false;
-    const pwCode = el.querySelector('.pw-val');
-    if (pwCode) {
-      pwCode.onclick = () => {
-        if (!pwShown) return;
-        navigator.clipboard?.writeText(u.password).then(() => toast('Пароль скопирован')).catch(() => {});
-      };
-    }
-    el.querySelector('.rolesel').onchange = async (e) => {
-      const r2 = await api('PATCH', '/api/users', { id: u.id, role: e.target.value });
-      toast(r2.ok ? 'Роль изменена' : errMsg(r2), !r2.ok);
-      loadUsers();
-    };
-    el.querySelectorAll('button').forEach((b) => (b.onclick = async () => {
-      if (b.dataset.a === 'showpw') {
-        pwShown = !pwShown;
-        pwCode.textContent = pwShown ? u.password : '••••••';
-        b.textContent = pwShown ? 'Скрыть пароль' : 'Показать пароль';
-        return;
-      }
-      if (b.dataset.a === 'pw') return openPw(u);
-      const patch = { id: u.id };
-      if (b.dataset.a === 'name') {
-        const n = await askText({ title: 'Переименовать сотрудника', label: 'Новое имя', value: u.name });
-        if (!n) return;
-        patch.name = n;
-      }
-      if (b.dataset.a === 'active') patch.active = !u.active;
-      const r2 = await api('PATCH', '/api/users', patch);
-      toast(r2.ok ? 'Сохранено' : errMsg(r2), !r2.ok);
-      loadUsers();
-    }));
+      `${u.active ? '' : '<span class="badge b-off">Отключён</span>'}</div>` +
+      `<div class="small muted" style="margin-top:3px">вход: ${esc(u.last_login || '—')}</div>` +
+      `</div>` +
+      editBtnHtml('', 'Настроить сотрудника');
+    el.onclick = () => openUserEdit(u);
     $('u-rows').appendChild(el);
   });
 }
@@ -687,41 +777,13 @@ $('h-chips').onclick = (e) => {
 };
 $('h-day').onchange = loadHistory;
 $('h-all').onclick = () => { $('h-day').value = ''; loadHistory(); };
-$('h-rows').onclick = async (e) => {
-  const b = e.target.closest('[data-a]');
+$('h-rows').onclick = (e) => {
+  const b = e.target.closest('[data-hm]');
   if (!b) return;
-  const m = state.histMap[b.dataset.k];
+  e.stopPropagation();
+  const m = state.histMap[b.dataset.hm];
   if (!m) return;
-  if (b.dataset.a === 'inv') {
-    const items = m.sale_id
-      ? state.histRows.filter((x) => x.device === m.device && x.sale_id === m.sale_id && x.status === 'active')
-      : [m];
-    const sale = {
-      device: m.device,
-      sale_id: m.sale_id || m.id,
-      ts: m.ts,
-      customer: m.customer || '—',
-      user_name: m.user_name || '',
-      note: m.note || '',
-      total_kg: Math.round(items.reduce((a, i) => a + Number(i.net_kg || 0), 0) * 1000) / 1000,
-      total_amount: Math.round(items.reduce((a, i) => a + Number(i.amount || 0), 0) * 100) / 100,
-      items,
-    };
-    openInvoice(sale, { crop: state.crop, cur: state.cur });
-    return;
-  }
-  if (b.dataset.a === 'cancel') {
-    const reason = await askText({
-      title: m.sale_id ? 'Отменить продажу' : 'Отменить запись',
-      label: 'Причина отмены',
-      placeholder: 'Укажите причину',
-      okText: 'Отменить',
-    });
-    if (!reason) return;
-    await sendCmd(m.sale_id ? 'cancel_sale' : 'cancel_movement', { id: m.sale_id || m.id, device: m.device, reason });
-  } else {
-    openEdit(m);
-  }
+  openRowMenu(b, buildHistMenuItems(m));
 };
 
 $('u-open-add').onclick = () => { $('u-err').textContent = ''; $('u-name').value = ''; $('u-pw').value = ''; $('u-add-dlg').showModal(); $('u-name').focus(); };
@@ -855,7 +917,7 @@ initExpenses({
 });
 initRefs({
   toast,
-  askText,
+  gradeColor,
   onRefsChanged: async () => {
     const s = await api('GET', '/api/status');
     if (s.ok) paintStatus(s.data);

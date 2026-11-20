@@ -1,10 +1,11 @@
 // Модуль «Справочники» (/refs): управление сортами и покупателями (без хардкода).
 import { api, errMsg } from './api.js';
+import { editBtnHtml, openEntityModal } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-let deps = { toast: () => {}, askText: async () => null, onRefsChanged: () => {} };
+let deps = { toast: () => {}, gradeColor: () => '#1b1b1b', onRefsChanged: () => {} };
 
 export async function loadRefs() {
   const r = await api('GET', '/api/status?resource=refs');
@@ -12,57 +13,91 @@ export async function loadRefs() {
   const { grades = [], customers = [] } = r.data;
 
   $('ref-grades').innerHTML = grades.map((g) => `
-    <li class="li">
+    <li class="li li-edit${g.active ? '' : ' off'}" data-edit-grade="${g.id}">
       <div class="l">
-        <div class="t">${esc(g.name)} ${g.active ? '' : '<span class="badge b-off">скрыт</span>'}</div>
+        <div class="t" style="display:flex;align-items:center;gap:8px">
+          <span class="sw" style="--gc:${deps.gradeColor(g.name)}"></span>
+          <span>${esc(g.name)}</span>
+          ${g.active ? '' : '<span class="badge b-off">Скрыт</span>'}
+        </div>
       </div>
-      <div style="display:flex;gap:6px;flex:none">
-        <button class="btn sec sm" data-g-act="rename" data-id="${g.id}" data-name="${esc(g.name)}">Имя</button>
-        <button class="btn sec sm" data-g-act="toggle" data-id="${g.id}" data-active="${g.active ? '1' : '0'}">${g.active ? 'Скрыть' : 'Вернуть'}</button>
-      </div>
+      ${editBtnHtml(`data-edit-grade="${g.id}"`, 'Редактировать сорт')}
     </li>`).join('') || '<div class="empty">Сортов нет</div>';
 
-  $('ref-grades').querySelectorAll('[data-g-act]').forEach((b) => {
-    b.onclick = async () => {
-      const patch = { target: 'grade', id: Number(b.dataset.id) };
-      if (b.dataset.gAct === 'rename') {
-        const n = await deps.askText({ title: 'Переименовать сорт', label: 'Новое название (обновится и в истории)', value: b.dataset.name });
-        if (!n) return;
-        patch.name = n;
-      } else {
-        patch.active = b.dataset.active !== '1';
-      }
-      const r2 = await api('PATCH', '/api/status?resource=refs', patch);
-      deps.toast(r2.ok ? 'Сохранено' : errMsg(r2), !r2.ok);
-      if (r2.ok) { await loadRefs(); deps.onRefsChanged(); }
+  $('ref-grades').querySelectorAll('li[data-edit-grade]').forEach((li) => {
+    li.onclick = () => {
+      const g = grades.find((x) => String(x.id) === li.dataset.editGrade);
+      if (!g) return;
+      openEntityModal({
+        title: 'Редактировать сорт',
+        subtitle: 'При переименовании сорт автоматически обновится в истории операций',
+        active: !!g.active,
+        archiveLabel: 'Скрыть сорт',
+        restoreLabel: 'Вернуть в список',
+        fields: [{ key: 'name', label: 'Название сорта', value: g.name, placeholder: 'Напр. Высший', required: true }],
+        onSave: async (vals) => {
+          const r2 = await api('PATCH', '/api/status?resource=refs', { target: 'grade', id: g.id, name: vals.name });
+          if (!r2.ok) return errMsg(r2);
+          deps.toast('Сорт обновлён');
+          await loadRefs();
+          deps.onRefsChanged();
+          return true;
+        },
+        onToggleActive: async (nextActive) => {
+          const r2 = await api('PATCH', '/api/status?resource=refs', { target: 'grade', id: g.id, active: nextActive });
+          if (!r2.ok) return errMsg(r2);
+          deps.toast(nextActive ? 'Сорт возвращён' : 'Сорт скрыт');
+          await loadRefs();
+          deps.onRefsChanged();
+          return true;
+        },
+      });
     };
   });
 
   $('ref-customers').innerHTML = customers.map((c) => `
-    <li class="li">
+    <li class="li li-edit${c.active ? '' : ' off'}" data-edit-cust="${c.id}">
       <div class="l">
-        <div class="t">${esc(c.name)} ${c.active ? '' : '<span class="badge b-off">скрыт</span>'}</div>
+        <div class="t" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>${esc(c.name)}</span>
+          ${c.active ? '' : '<span class="badge b-off">Скрыт</span>'}
+        </div>
         ${c.phone || c.note ? `<div class="s">${[c.phone, c.note].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
       </div>
-      <div style="display:flex;gap:6px;flex:none">
-        <button class="btn sec sm" data-c-act="rename" data-id="${c.id}" data-name="${esc(c.name)}">Имя</button>
-        <button class="btn sec sm" data-c-act="toggle" data-id="${c.id}" data-active="${c.active ? '1' : '0'}">${c.active ? 'Скрыть' : 'Вернуть'}</button>
-      </div>
+      ${editBtnHtml(`data-edit-cust="${c.id}"`, 'Редактировать покупателя')}
     </li>`).join('') || '<div class="empty">Покупателей пока нет</div>';
 
-  $('ref-customers').querySelectorAll('[data-c-act]').forEach((b) => {
-    b.onclick = async () => {
-      const patch = { target: 'customer', id: Number(b.dataset.id) };
-      if (b.dataset.cAct === 'rename') {
-        const n = await deps.askText({ title: 'Переименовать покупателя', label: 'Новое имя', value: b.dataset.name });
-        if (!n) return;
-        patch.name = n;
-      } else {
-        patch.active = b.dataset.active !== '1';
-      }
-      const r2 = await api('PATCH', '/api/status?resource=refs', patch);
-      deps.toast(r2.ok ? 'Сохранено' : errMsg(r2), !r2.ok);
-      if (r2.ok) { await loadRefs(); deps.onRefsChanged(); }
+  $('ref-customers').querySelectorAll('li[data-edit-cust]').forEach((li) => {
+    li.onclick = () => {
+      const c = customers.find((x) => String(x.id) === li.dataset.editCust);
+      if (!c) return;
+      openEntityModal({
+        title: 'Редактировать покупателя',
+        active: !!c.active,
+        archiveLabel: 'Скрыть из списка',
+        restoreLabel: 'Вернуть в список',
+        fields: [
+          { key: 'name', label: 'Название или имя', value: c.name, required: true },
+          { key: 'phone', label: 'Телефон', value: c.phone || '', placeholder: '+998…' },
+          { key: 'note', label: 'Заметка', value: c.note || '', placeholder: 'Комментарий' },
+        ],
+        onSave: async (vals) => {
+          const r2 = await api('PATCH', '/api/status?resource=refs', { target: 'customer', id: c.id, ...vals });
+          if (!r2.ok) return errMsg(r2);
+          deps.toast('Покупатель обновлён');
+          await loadRefs();
+          deps.onRefsChanged();
+          return true;
+        },
+        onToggleActive: async (nextActive) => {
+          const r2 = await api('PATCH', '/api/status?resource=refs', { target: 'customer', id: c.id, active: nextActive });
+          if (!r2.ok) return errMsg(r2);
+          deps.toast(nextActive ? 'Покупатель возвращён' : 'Покупатель скрыт');
+          await loadRefs();
+          deps.onRefsChanged();
+          return true;
+        },
+      });
     };
   });
 }
