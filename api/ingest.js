@@ -1,6 +1,8 @@
 // Приёмник: сюда моноблок отправляет новые операции. Повторная отправка безопасна (upsert по device+id).
 const { query, ensureSchema } = require('../lib/db');
 const { requireIngestToken } = require('../lib/auth');
+const { getStock } = require('../lib/warehouse');
+const { notifyIntake, notifySale } = require('../lib/telegram');
 
 const TYPES = new Set(['in', 'out', 'writeoff']);
 const TS = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/;
@@ -62,7 +64,15 @@ module.exports = async (req, res) => {
       );
     }
 
+    let newRows = [];
     if (rows.length) {
+      const existing = await query(
+        `SELECT id FROM movements WHERE device=$1 AND id = ANY($2::int[])`,
+        [device, rows.map((r) => r.id)]
+      );
+      const existingIds = new Set(existing.map((e) => e.id));
+      newRows = rows.filter((r) => !existingIds.has(r.id) && r.status === 'active' && (r.type === 'in' || r.type === 'out'));
+
       await query(
         `INSERT INTO movements (device,id,ts,type,grade,gross_kg,tare_kg,net_kg,manual,worker,note,sale_id,customer,
                                 price_per_kg,amount,user_name,status,cancel_reason,cancelled_ts,updated_at)
@@ -115,6 +125,46 @@ module.exports = async (req, res) => {
       `SELECT id, kind, payload, user_name, user_role FROM commands WHERE device=$1 AND status='pending' ORDER BY id LIMIT 20`,
       [device]
     );
+
+    // Отправляем в Telegram только новые операции прихода и продажи с моноблока
+    if (newRows.length) {
+      const cur = b.currency ? String(b.currency).slice(0, 20) : 'сум';
+      const { byGrade } = await getStock().catch(() => ({ byGrade: {} }));
+      const intakes = newRows.filter((r) => r.type === 'in').slice(0, 10);
+      for (const r of intakes) {
+        await notifyIntake({
+          grade: r.grade,
+          net_kg: r.net_kg,
+          balance_kg: byGrade[r.grade],
+          user_name: r.user_name || '',
+          note: r.note || '',
+          source: device,
+        });
+      }
+      const salesMap = new Map();
+      for (const r of newRows.filter((x) => x.type === 'out')) {
+        const key = r.sale_id ? `s:${r.sale_id}` : `m:${r.id}`;
+        if (!salesMap.has(key)) {
+          salesMap.set(key, {
+            sale_id: r.sale_id || r.id,
+            customer: r.customer || '—',
+            user_name: r.user_name || '',
+            note: r.note || '',
+            items: [],
+            total_kg: 0,
+            total_amount: 0,
+          });
+        }
+        const s = salesMap.get(key);
+        s.items.push({ grade: r.grade, net_kg: r.net_kg, price_per_kg: r.price_per_kg, amount: r.amount });
+        s.total_kg = Math.round((s.total_kg + Number(r.net_kg || 0)) * 1000) / 1000;
+        s.total_amount = Math.round((s.total_amount + Number(r.amount || 0)) * 100) / 100;
+      }
+      for (const s of [...salesMap.values()].slice(0, 10)) {
+        await notifySale({ ...s, currency: cur, source: device });
+      }
+    }
+
     res.status(200).json({ ok: true, accepted: rows.length, commands });
   } catch (e) {
     if (e.status === 400) return res.status(400).json({ error: e.message });

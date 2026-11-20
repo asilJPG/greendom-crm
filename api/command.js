@@ -2,7 +2,8 @@
 const { query } = require('../lib/db');
 const { handler, TZ } = require('../lib/http');
 const { audit } = require('../lib/auth');
-const { cleanPayload, applyOperation } = require('../lib/warehouse');
+const { cleanPayload, applyOperation, getStock } = require('../lib/warehouse');
+const { notifyIntake, notifySale } = require('../lib/telegram');
 
 module.exports = handler(
   async (req, res) => {
@@ -69,6 +70,31 @@ module.exports = handler(
     );
     if (!ins.length) return res.status(200).json({ ok: true, duplicate: true });
     await audit(req, req.user.name, 'command', `#${ins[0].id} ${kind} (${applied.targetDevice})`);
+
+    // Уведомление в Telegram-группу о приходе и продаже (не ломает операцию при сбое сети)
+    if (kind === 'intake') {
+      const { byGrade } = await getStock().catch(() => ({ byGrade: {} }));
+      await notifyIntake({
+        grade: payload.grade,
+        net_kg: payload.net_kg,
+        balance_kg: byGrade[payload.grade],
+        user_name: req.user.name,
+        note: payload.note,
+      });
+    } else if (kind === 'sale') {
+      const [dev] = await query(`SELECT currency FROM devices ORDER BY last_seen DESC LIMIT 1`).catch(() => []);
+      await notifySale({
+        sale_id: applied.sale_id,
+        customer: payload.customer,
+        items: payload.items,
+        total_kg: applied.total_kg,
+        total_amount: applied.total_amount,
+        currency: dev?.currency || 'сум',
+        user_name: req.user.name,
+        note: payload.note,
+      });
+    }
+
     return res.status(200).json({ ok: true, id: ins[0].id, applied_cloud: true, status: applied.status });
   },
   { method: ['GET', 'POST', 'PATCH'], roles: ['keeper', 'admin'] }

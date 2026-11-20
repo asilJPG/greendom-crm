@@ -779,3 +779,67 @@ test('CRM-карточка контрагента, многострочный а
   assert.equal(invGet.body.by_investor[0].investor, 'Асил');
   assert.equal(invGet.body.by_investor[0].share_pct, 100);
 });
+
+test('Telegram-бот: уведомления о приходе и продаже с сайта и моноблока без дублей', async () => {
+  await globalThis.__TEST_DB.query('DELETE FROM login_fails');
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const sent = [];
+  globalThis.__TEST_TG = (msg) => sent.push(msg);
+
+  try {
+    // 1. Приход с сайта
+    const rIn = await call(command, {
+      method: 'POST',
+      body: { kind: 'intake', request_id: 'tg-in-1', payload: { grade: 'Высший', net_kg: 12.5, note: 'Теплица 2' } },
+      ...as(admin),
+    });
+    assert.equal(rIn.code, 200);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0], /Приход на склад/);
+    assert.match(sent[0], /Высший/);
+    assert.match(sent[0], /12\.500 кг/);
+
+    // 2. Продажа с сайта
+    const rOut = await call(command, {
+      method: 'POST',
+      body: {
+        kind: 'sale',
+        request_id: 'tg-sale-1',
+        payload: { customer: 'Корзинка', items: [{ grade: 'Высший', net_kg: 4, price_per_kg: 150000, amount: 600000 }] },
+      },
+      ...as(admin),
+    });
+    assert.equal(rOut.code, 200);
+    assert.equal(sent.length, 2);
+    assert.match(sent[1], /Продажа №/);
+    assert.match(sent[1], /Корзинка/);
+    assert.match(sent[1], /4\.000 кг/);
+
+    // 3. Синхронизация с моноблока: новая продажа из 2 позиций -> 1 сообщение, повторная отправка -> 0 дублей
+    const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const batch = {
+      device: 'tg-mono',
+      crop: 'Клубника',
+      currency: 'сум',
+      grades: ['Высший', 'Первый'],
+      movements: [
+        { id: 901, ts, type: 'in', grade: 'Первый', net_kg: 8.2, user_name: 'Складовщик' },
+        { id: 902, ts, type: 'out', grade: 'Высший', net_kg: 2, sale_id: 55, customer: 'Хавас', price_per_kg: 140000, amount: 280000 },
+        { id: 903, ts, type: 'out', grade: 'Первый', net_kg: 3, sale_id: 55, customer: 'Хавас', price_per_kg: 100000, amount: 300000 },
+      ],
+    };
+    const ing1 = await call(ingest, { method: 'POST', headers: { authorization: `Bearer ${process.env.INGEST_TOKEN}` }, body: batch });
+    assert.equal(ing1.code, 200);
+    assert.equal(sent.length, 4, 'приход + 1 сгруппированная продажа из 2 позиций');
+    assert.match(sent[3], /Продажа №55/);
+    assert.match(sent[3], /Хавас/);
+    assert.match(sent[3], /5\.000 кг/);
+
+    // Повторная синхронизация тех же записей не шлёт дубликаты
+    const ing2 = await call(ingest, { method: 'POST', headers: { authorization: `Bearer ${process.env.INGEST_TOKEN}` }, body: batch });
+    assert.equal(ing2.code, 200);
+    assert.equal(sent.length, 4, 'дубликаты в Telegram не отправляются');
+  } finally {
+    delete globalThis.__TEST_TG;
+  }
+});
