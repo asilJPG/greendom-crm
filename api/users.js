@@ -1,5 +1,5 @@
 const { query } = require('../lib/db');
-const { handler } = require('../lib/http');
+const { handler, TZ } = require('../lib/http');
 const { MIN_PASSWORD, hashPassword, passwordTaken, audit } = require('../lib/auth');
 
 const ROLES = ['admin', 'director', 'keeper'];
@@ -34,15 +34,17 @@ module.exports = handler(
       if (req.method === 'GET') {
         if (req.query.log) {
           const log = await query(
-            `SELECT to_char(ts at time zone 'Asia/Tashkent','YYYY-MM-DD HH24:MI:SS') AS ts, user_name, action, detail, ip
-             FROM audit_log ORDER BY id DESC LIMIT 100`
+            `SELECT to_char(ts at time zone $1,'YYYY-MM-DD HH24:MI:SS') AS ts, user_name, action, detail, ip
+             FROM audit_log ORDER BY id DESC LIMIT 100`,
+            [TZ]
           );
           return res.status(200).json(log);
         }
         const users = await query(
           `SELECT id, name, role, active, must_change,
-                  to_char(last_login at time zone 'Asia/Tashkent','YYYY-MM-DD HH24:MI') AS last_login
-           FROM app_users ORDER BY id`
+                  to_char(last_login at time zone $1,'YYYY-MM-DD HH24:MI') AS last_login
+           FROM app_users ORDER BY id`,
+          [TZ]
         );
         return res.status(200).json(users);
       }

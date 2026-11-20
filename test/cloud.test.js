@@ -410,4 +410,12 @@ test('операции с сайта: мгновенное применение,
   }
   const over = await post(keeper, 'intake', P);
   assert.equal(over.code, 429, 'больше 20 ожидающих команд не принимается');
+
+  // CSRF: чужой Origin на мутирующем запросе отклоняется
+  const csrf = await call(command, {
+    method: 'POST',
+    body: { kind: 'intake', payload: P },
+    headers: { cookie: admin, host: 'sklad-urozhay.vercel.app', origin: 'https://evil.example' },
+  });
+  assert.equal(csrf.code, 403, 'чужой Origin отклонён');
 });
