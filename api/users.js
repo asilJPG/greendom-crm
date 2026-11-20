@@ -58,7 +58,7 @@ module.exports = handler(
         if (dup) return res.status(409).json({ error: 'Такое имя уже есть' });
         if (await passwordTaken(password)) return res.status(409).json({ error: 'Такой пароль уже используется, выберите другой' });
         const [u] = await query(
-          'INSERT INTO app_users(name, role, pass_hash, must_change) VALUES ($1,$2,$3,true) RETURNING id',
+          'INSERT INTO app_users(name, role, pass_hash, must_change) VALUES ($1,$2,$3,false) RETURNING id',
           [name, role, hashPassword(password)]
         );
         await audit(req, req.user.name, 'user_add', `#${u.id} ${name} (${role})`);
@@ -88,7 +88,7 @@ module.exports = handler(
         const pw = cleanPassword(b.password);
         if (await passwordTaken(pw, id)) return res.status(409).json({ error: 'Такой пароль уже используется, выберите другой' });
         passHash = hashPassword(pw);
-        mustChange = true; // новый пароль задан администратором: человек выберет свой при входе
+        mustChange = false; // пароль, заданный администратором, сразу постоянный
         bump = true;
       }
       await query(

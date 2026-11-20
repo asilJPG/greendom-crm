@@ -230,7 +230,7 @@ function openPw(target) {
   $('pd-new').value = '';
   $('pd-title').textContent = target ? `Новый пароль для «${target.name}»` : 'Сменить пароль';
   $('pd-old-f').hidden = !!target;
-  $('pd-new-l').textContent = target ? 'Временный пароль (от 6 символов)' : 'Новый пароль (от 6 символов)';
+  $('pd-new-l').textContent = 'Новый пароль (от 6 символов)';
   $('pw-dlg').showModal();
 }
 
@@ -528,7 +528,7 @@ $('pd-ok').onclick = async () => {
     : await api('POST', '/api/password', { old_password: $('pd-old').value, new_password: $('pd-new').value });
   if (!r.ok) { $('pd-err').textContent = errMsg(r); return; }
   $('pw-dlg').close();
-  toast(state.pwTarget ? 'Пароль задан, сотрудник сменит его при входе' : 'Пароль изменён');
+  toast(state.pwTarget ? 'Пароль обновлён' : 'Пароль изменён');
   if (state.pwTarget) loadUsers();
 };
 

@@ -159,7 +159,7 @@ test('отмена на моноблоке доходит до облака и �
 });
 
 // ───────── пользователи, роли, смена пароля ─────────
-test('админ создаёт пользователя; одинаковые пароли не принимаются; временный пароль не пускает к данным', async () => {
+test('админ создаёт пользователя; одинаковые пароли не принимаются; пароль сразу постоянный', async () => {
   const { cookie: admin } = await signIn(OWNER_PW);
   const add = (body) => call(users, { method: 'POST', body, ...as(admin) });
   assert.equal((await add({ name: 'Бахтиёр', password: 'short', role: 'director' })).code, 400, 'короткий пароль');
@@ -171,15 +171,14 @@ test('админ создаёт пользователя; одинаковые �
 
   const v = await signIn('viewerpass1');
   assert.equal(v.body.role, 'director', 'роль определена по паролю');
-  assert.equal(v.body.must_change, true);
+  assert.equal(v.body.must_change, false, 'пароль сразу постоянный');
   for (const [name, fn] of DATA_ENDPOINTS) {
     const r = await call(fn, as(v.cookie));
-    assert.equal(r.code, 403, `${name}: данные закрыты до смены пароля`);
-    assert.equal(r.body.must_change, true);
+    assert.equal(r.code, 200, `${name}: данные доступны сразу после входа`);
   }
   const st = await call(status, as(v.cookie));
   assert.equal(st.code, 200);
-  assert.deepEqual(st.body.devices, [], 'до смены пароля данные склада не отдаются даже через status');
+  assert.ok(st.body.devices.length >= 1, 'данные склада отдаются сразу');
 });
 
 test('смена пароля: правила (в т.ч. чужой пароль), старая сессия отзывается', async () => {
@@ -227,7 +226,7 @@ test('отключение и сброс пароля отзывают вход�
   assert.equal((await reset('reset-by-admin-1')).code, 200);
   assert.equal((await call(stock, as(v1.cookie))).code, 401, 'сброс пароля отзывает вход');
   const v2 = await signIn('reset-by-admin-1');
-  assert.equal(v2.body.must_change, true, 'после сброса снова нужен свой пароль');
+  assert.equal(v2.body.must_change, false, 'после сброса админом пароль сразу постоянный');
   assert.equal((await call(users, { method: 'PATCH', body: { id: bakh.id, active: false }, ...as(admin) })).code, 200);
   assert.equal((await call(stock, as(v2.cookie))).code, 401, 'отключённый выброшен');
   assert.equal((await call(login, { method: 'POST', body: { password: 'reset-by-admin-1' } })).code, 401, 'и не может войти');
