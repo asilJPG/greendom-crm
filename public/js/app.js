@@ -357,7 +357,7 @@ async function loadUsers() {
     el.style.cssText = 'display:block';
     const pwHtml = u.password
       ? `<span class="small muted" style="margin-left:4px">· пароль: <code class="pw-val" style="font-family:ui-monospace,monospace;background:var(--soft);padding:2px 6px;border-radius:6px;cursor:pointer" title="Нажмите, чтобы скопировать">••••••</code></span>`
-      : '';
+      : `<span class="small muted" style="margin-left:4px">· пароль не сохранён (задайте новый или войдите)</span>`;
     el.innerHTML =
       `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(u.name)}</b>` +
       `<span class="badge b-${u.role}">${ROLE_NAME[u.role] || u.role}</span>` +

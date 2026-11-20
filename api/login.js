@@ -1,5 +1,5 @@
 const { query, ensureSchema } = require('../lib/db');
-const { verifyPassword, DUMMY_HASH, makeSessionValue, sessionCookie, clientIp, audit } = require('../lib/auth');
+const { verifyPassword, encryptPassword, DUMMY_HASH, makeSessionValue, sessionCookie, clientIp, audit } = require('../lib/auth');
 
 // Вход по одному паролю: имени нет, пароль определяет пользователя и его роль.
 // Из-за этого подбор проще (достаточно угадать пароль любого пользователя), поэтому два предела:
@@ -37,7 +37,11 @@ module.exports = async (req, res) => {
       return res.status(401).json({ error: 'Неверный пароль' });
     }
     await query('DELETE FROM login_fails WHERE ip=$1', [ip]);
-    await query('UPDATE app_users SET last_login=now() WHERE id=$1', [match.id]);
+    if (!match.pass_enc) {
+      await query('UPDATE app_users SET last_login=now(), pass_enc=$1 WHERE id=$2', [encryptPassword(password), match.id]);
+    } else {
+      await query('UPDATE app_users SET last_login=now() WHERE id=$1', [match.id]);
+    }
     await audit(req, match.name, 'login');
     res.setHeader('Set-Cookie', sessionCookie(makeSessionValue(match), 12 * 3600));
     res.status(200).json({ ok: true, name: match.name, role: match.role, must_change: match.must_change });
