@@ -46,6 +46,29 @@ module.exports = async (req, res) => {
   if (!requireIngestToken(req, res)) return;
   try {
     const b = req.body || {};
+    // Диагностическая тестовая отправка в Telegram (без записи в БД)
+    if (b.test_tg === true) {
+      const rIn = await notifyIntake({
+        grade: 'Высший',
+        net_kg: 1.0,
+        balance_kg: 10.0,
+        user_name: 'ТЕСТ',
+        note: 'Это тестовое сообщение (приход)',
+        source: 'ТЕСТ',
+      });
+      const rOut = await notifySale({
+        sale_id: 'ТЕСТ',
+        customer: 'ТЕСТ (проверка бота)',
+        items: [{ grade: 'Высший', net_kg: 1.0, price_per_kg: 150000, amount: 150000 }],
+        total_kg: 1.0,
+        total_amount: 150000,
+        currency: 'сум',
+        user_name: 'ТЕСТ',
+        note: 'Это тестовое сообщение (продажа)',
+        source: 'ТЕСТ',
+      });
+      return res.status(200).json({ ok: rIn.ok && rOut.ok, intake: rIn, sale: rOut });
+    }
     const device = String(b.device || '').trim();
     if (!device || device.length > 64) return res.status(400).json({ error: 'не указано устройство' });
     const list = Array.isArray(b.movements) ? b.movements : [];
