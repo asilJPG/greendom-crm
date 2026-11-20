@@ -86,6 +86,14 @@ module.exports = async (req, res) => {
          )`,
         [device, JSON.stringify(rows)]
       );
+      // Автоматически пополняем справочник покупателей из поступивших продаж
+      await query(
+        `INSERT INTO customers(name)
+         SELECT DISTINCT trim(customer) FROM movements
+         WHERE device=$1 AND customer IS NOT NULL AND trim(customer) <> ''
+         ON CONFLICT DO NOTHING`,
+        [device]
+      );
     }
     await query(
       `INSERT INTO devices (device,last_seen,crop,currency,grades,pending) VALUES ($1, now(), $2, $3, $4::jsonb, $5)

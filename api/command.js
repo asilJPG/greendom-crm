@@ -48,8 +48,8 @@ module.exports = handler(
     const kind = String(b.kind || '');
     if (kind === 'edit' && req.user.role !== 'admin') return res.status(403).json({ error: 'править записи может только администратор' });
 
-    const [dev] = await query('SELECT device, grades FROM devices ORDER BY last_seen DESC LIMIT 1');
-    const grades = dev && Array.isArray(dev.grades) ? dev.grades.map(String) : [];
+    const gradeRows = await query('SELECT name FROM grades WHERE active ORDER BY sort_order, id');
+    const grades = gradeRows.map((g) => g.name);
     const payload = cleanPayload(kind, b.payload || {}, grades);
     const reqId = b.request_id ? String(b.request_id).slice(0, 64) : null;
     if (reqId) {

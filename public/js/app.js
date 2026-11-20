@@ -1,9 +1,10 @@
 import { api, rawCall, errMsg, configureAuthHandlers } from './api.js';
-import { initScale, autoConnectScale } from './scale.js';
+import { initScale, autoConnectScale, getActiveWeightKg, clearManualWeight, renderDisplay } from './scale.js';
 import { isPasskeySupported, registerPasskey, loginWithPasskey } from './passkey.js';
 import { initReport, loadReport } from './report.js';
 import { initInvoice, openInvoice } from './invoice.js';
 import { initExpenses, loadExpenses } from './expenses.js';
+import { initRefs, loadRefs } from './refs.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -23,15 +24,16 @@ const ST = { pending: ['ждёт склад', 'b-pending'], applied: ['выпо�
 // Маршруты приложения: [id, path, название, иконка, роли|null, группа]
 const ROUTES = [
   ['stock', '/stock', 'Остатки', 'i-stock', null, 'Склад'],
-  ['report', '/report', 'Отчёт', 'i-report', null, 'Склад'],
+  ['intake', '/intake', 'Приход', 'i-in', ['keeper', 'admin'], 'Склад'],
+  ['sale', '/sale', 'Продажа', 'i-out', ['keeper', 'admin'], 'Склад'],
+  ['writeoff', '/writeoff', 'Списание', 'i-wo', ['keeper', 'admin'], 'Склад'],
   ['history', '/history', 'История', 'i-history', null, 'Склад'],
-  ['intake', '/intake', 'Приход', 'i-in', ['keeper', 'admin'], 'Работа'],
-  ['sale', '/sale', 'Продажа', 'i-out', ['keeper', 'admin'], 'Работа'],
-  ['writeoff', '/writeoff', 'Списание', 'i-wo', ['keeper', 'admin'], 'Работа'],
-  ['expenses', '/expenses', 'Расходы', 'i-exp', null, 'Работа'],
-  ['queue', '/queue', 'Очередь', 'i-queue', ['keeper', 'admin'], 'Работа'],
+  ['report', '/report', 'Отчёт (ОПиУ)', 'i-report', ['director', 'admin'], 'Административное'],
+  ['expenses', '/expenses', 'Расходы', 'i-exp', ['director', 'admin'], 'Административное'],
+  ['refs', '/refs', 'Справочники', 'i-refs', ['admin'], 'Администрирование'],
   ['users', '/users', 'Сотрудники', 'i-users', ['admin'], 'Администрирование'],
   ['log', '/log', 'Журнал', 'i-log', ['admin'], 'Администрирование'],
+  ['queue', '/queue', 'Очередь', 'i-queue', ['admin'], 'Администрирование'],
 ];
 
 const state = {
@@ -40,6 +42,8 @@ const state = {
   cur: 'сум',
   crop: 'Клубника',
   grades: [],
+  customers: [],
+  stockMap: {},
   gradeIdx: {},
   histMap: {},
   histRows: [],
@@ -51,6 +55,10 @@ const state = {
   toastTimer: null,
   pwTarget: null,
   edTarget: null,
+  selGrade: { in: '', sl: '', wo: '' },
+  selCustomer: '',
+  woReason: 'Брак',
+  saleCart: [],
 };
 
 function toast(text, bad = false) {
@@ -69,7 +77,7 @@ function gradeColor(g) {
 const row = (l, s, r, extra = '') =>
   `<li class="li ${extra}"><div class="l"><div class="t">${l}</div>${s ? `<div class="s">${s}</div>` : ''}</div><div class="r">${r}</div></li>`;
 
-// Универсальное модальное окно ввода текста (вместо браузерного prompt())
+// Универсальное модальное окно ввода текста
 function askText({ title, label, value = '', placeholder = '', okText = 'Сохранить' }) {
   return new Promise((resolve) => {
     const dlg = $('prompt-dlg');
@@ -179,9 +187,9 @@ function navigate(id, { push = true, replace = false } = {}) {
   document.title = `${label} · Склад`;
 
   document.querySelectorAll('#nav .nav-item').forEach((a) => a.classList.toggle('sel', a.dataset.tab === ridTab));
-  ROUTES.forEach(([key]) => ($('p-' + key).hidden = key !== ridTab));
+  ROUTES.forEach(([key]) => { const el = $('p-' + key); if (el) el.hidden = key !== ridTab; });
   const isOp = ridTab === 'intake' || ridTab === 'sale' || ridTab === 'writeoff';
-  $('ops-shared').hidden = !isOp;
+  $('ops-shell').hidden = !isOp;
 
   clearInterval(state.opsTimer);
   closeDrawer();
@@ -198,15 +206,17 @@ function navigate(id, { push = true, replace = false } = {}) {
   }
   if (ridTab === 'history') loadHistory();
   if (isOp) {
-    fillGrades();
+    loadStock().then(() => { renderOpsTiles(); renderCustomerChips(); });
     autoConnectScale();
-    if (ridTab === 'sale' && !$('sl-items').children.length) addSaleRow();
+    renderDisplay();
+    renderSaleCart();
   }
   if (ridTab === 'queue') {
     loadOps();
     state.opsTimer = setInterval(loadOps, 8000);
   }
   if (ridTab === 'expenses') loadExpenses();
+  if (ridTab === 'refs') loadRefs();
   if (ridTab === 'users') loadUsers();
   if (ridTab === 'log') loadLog();
 }
@@ -242,8 +252,10 @@ function openPw(target) {
   $('pw-dlg').showModal();
 }
 
-/* ───── старт и статус ───── */
+/* ───── старт, статус и справочники ───── */
 function paintStatus(d) {
+  if (Array.isArray(d.grades) && d.grades.length) state.grades = d.grades;
+  if (Array.isArray(d.customers)) state.customers = d.customers;
   const dev = d.devices[0];
   if (!dev) {
     $('seen').textContent = 'нет данных';
@@ -251,7 +263,7 @@ function paintStatus(d) {
     $('stale').hidden = true;
     return;
   }
-  state.grades = Array.isArray(dev.grades) ? dev.grades : [];
+  if (!state.grades.length && Array.isArray(dev.grades)) state.grades = dev.grades;
   state.lastSeenSec = dev.seconds_ago;
   state.cur = dev.currency || 'сум';
   state.crop = dev.crop || 'Клубника';
@@ -261,6 +273,8 @@ function paintStatus(d) {
   const stale = dev.seconds_ago > 900;
   $('dot').className = 'dot ' + (stale ? 'bad' : 'ok');
   $('stale').hidden = !stale;
+  $('ops-stale').hidden = !stale;
+  if (stale) $('ops-stale').textContent = 'Моноблок сейчас не на связи: изменения сохранятся на сайте сразу, а моноблок подтянет их при подключении.';
 }
 
 async function refreshAll() {
@@ -284,7 +298,7 @@ async function start() {
   buildNav();
   paintStatus(r.data);
   navigate(resolveRouteFromPath(location.pathname), { push: false, replace: true });
-  if (state.me.role !== 'director') loadOps();
+  if (state.me.role === 'admin') loadOps();
 
   clearInterval(state.timer);
   state.timer = setInterval(refreshAll, 30000);
@@ -295,12 +309,84 @@ async function loadStock() {
   const r = await api('GET', '/api/stock');
   if (!r.ok) return;
   const d = r.data;
+  state.stockMap = Object.fromEntries(d.rows.map((x) => [x.grade, x.balance_kg]));
   $('total').textContent = kg(d.total_kg);
   $('stock-cards').innerHTML = d.rows.map((x) =>
     `<div class="gcard"><div class="nm"><span class="sw" style="--gc:${gradeColor(x.grade)}"></span>${esc(x.grade)}</div>` +
     `<div class="bal">${kg(x.balance_kg)} <small>кг</small></div>` +
     `<div class="mini"><div>приход<b>${kg(x.in_kg)}</b></div><div>продано<b>${kg(x.out_kg)}</b></div><div>списано<b>${kg(x.writeoff_kg)}</b></div></div></div>`
   ).join('') || '<div class="empty">Данных ещё нет</div>';
+}
+
+/* ───── сенсорные плитки сортов и покупателей (Приход / Продажа / Списание) ───── */
+function renderOpsTiles() {
+  const grades = state.grades;
+  for (const [key, elId] of [['in', 'in-grades'], ['sl', 'sl-grades'], ['wo', 'wo-grades']]) {
+    if (!grades.includes(state.selGrade[key])) state.selGrade[key] = grades[0] || '';
+    const box = $(elId);
+    if (!box) continue;
+    box.innerHTML = grades.map((g) => {
+      const bal = state.stockMap[g] ?? 0;
+      const sel = state.selGrade[key] === g ? ' sel' : '';
+      return `<button type="button" class="gtile${sel}" style="--gc:${gradeColor(g)}" data-g="${esc(g)}"><b>${esc(g)}</b><small>на складе: ${kg(bal)} кг</small></button>`;
+    }).join('') || '<div class="small muted">Добавьте сорта в разделе «Справочники»</div>';
+    box.onclick = (e) => {
+      const b = e.target.closest('[data-g]');
+      if (!b) return;
+      state.selGrade[key] = b.dataset.g;
+      box.querySelectorAll('.gtile').forEach((t) => t.classList.toggle('sel', t === b));
+    };
+  }
+  const ed = $('ed-grade');
+  if (ed) {
+    const v = ed.value;
+    ed.innerHTML = grades.map((g) => `<option>${esc(g)}</option>`).join('');
+    if (grades.includes(v)) ed.value = v;
+  }
+}
+
+function renderCustomerChips() {
+  const box = $('sl-cust-chips');
+  if (!box) return;
+  const list = state.customers;
+  if (state.selCustomer && !list.some((c) => c.name === state.selCustomer)) {
+    state.selCustomer = list[0] ? list[0].name : '';
+  }
+  box.innerHTML = list.map((c) =>
+    `<button type="button" class="chip${state.selCustomer === c.name ? ' sel' : ''}" data-c="${esc(c.name)}">${esc(c.name)}</button>`
+  ).join('') || '<div class="small muted">Нажмите «+ Новый», чтобы добавить первого покупателя</div>';
+  box.onclick = (e) => {
+    const b = e.target.closest('[data-c]');
+    if (!b) return;
+    state.selCustomer = b.dataset.c;
+    box.querySelectorAll('.chip').forEach((ch) => ch.classList.toggle('sel', ch === b));
+  };
+}
+
+function renderSaleCart() {
+  const box = $('sl-cart');
+  if (!box) return;
+  if (!state.saleCart.length) {
+    box.innerHTML = '';
+    $('sl-total').textContent = `0 ${state.cur}`;
+    return;
+  }
+  box.innerHTML = state.saleCart.map((it, idx) => `
+    <div class="sale-line">
+      <div>
+        <b>${esc(it.grade)}</b> · ${kg(it.net_kg)} кг
+        <div class="small muted">${it.price_per_kg != null ? `${money(it.price_per_kg)} ${esc(state.cur)}/кг` : 'цена не указана'}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <b>${money(it.amount)} ${esc(state.cur)}</b>
+        <button type="button" class="btn sec sm" data-rm="${idx}" aria-label="Убрать">×</button>
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('[data-rm]').forEach((b) => {
+    b.onclick = () => { state.saleCart.splice(Number(b.dataset.rm), 1); renderSaleCart(); };
+  });
+  const totalAmt = state.saleCart.reduce((a, i) => a + Number(i.amount || 0), 0);
+  $('sl-total').textContent = `${money(totalAmt)} ${state.cur}`;
 }
 
 /* ───── история ───── */
@@ -402,29 +488,18 @@ async function loadLog() {
     : '<div class="empty">Записей нет</div>';
 }
 
-/* ───── операции и очередь ───── */
-function fillGrades() {
-  for (const id of ['in-grade', 'wo-grade', 'ed-grade']) {
-    const el = $(id), v = el.value;
-    el.innerHTML = state.grades.map((g) => `<option>${esc(g)}</option>`).join('');
-    if (state.grades.includes(v)) el.value = v;
-  }
-  document.querySelectorAll('#sl-items select').forEach((el) => {
-    const v = el.value;
-    el.innerHTML = state.grades.map((g) => `<option>${esc(g)}</option>`).join('');
-    if (state.grades.includes(v)) el.value = v;
-  });
-  const stale = state.lastSeenSec > 900;
-  $('ops-stale').hidden = !stale;
-  if (stale) $('ops-stale').textContent = 'Моноблок сейчас не на связи: изменения сохранятся на сайте сразу, а моноблок подтянет их при подключении.';
-}
-
+/* ───── команды и очередь ───── */
 async function sendCmd(kind, payload, requestId) {
   const r = await api('POST', '/api/command', { kind, payload, request_id: requestId || rid() });
   if (!r.ok) { toast(errMsg(r), true); return false; }
   toast(r.data.duplicate ? 'Эта операция уже принята' : r.data.status === 'pending' ? 'Сохранено на сайте (синхронизируется со складом)' : 'Сохранено');
   if (state.tab === 'history') loadHistory();
-  else loadOps();
+  else if (state.tab === 'queue') loadOps();
+  else {
+    await loadStock();
+    renderOpsTiles();
+    if (state.me && state.me.role === 'admin') loadOps();
+  }
   return true;
 }
 
@@ -441,34 +516,9 @@ function guard(btn, fn) {
   };
 }
 
-function addSaleRow() {
-  const el = document.createElement('div');
-  el.className = 'sitem';
-  const n = 'sl' + Math.random().toString(36).slice(2, 7);
-  el.innerHTML =
-    `<div class="wrow"><select>${state.grades.map((g) => `<option>${esc(g)}</option>`).join('')}</select>` +
-    `<button class="btn sec sm" data-del style="min-width:44px" aria-label="Убрать позицию">×</button></div>` +
-    `<div class="wrow" style="margin-top:8px"><input id="${n}" class="kg" type="number" inputmode="decimal" step="0.001" min="0" placeholder="Вес, кг">` +
-    `<button class="btn sec sm sc-read" data-t="${n}">С весов</button></div>` +
-    `<div class="two"><input class="price" type="number" inputmode="decimal" min="0" placeholder="Цена за кг">` +
-    `<input class="amt" type="number" inputmode="decimal" min="0" placeholder="Сумма"></div>`;
-  const kgI = el.querySelector('.kg'), pr = el.querySelector('.price'), am = el.querySelector('.amt');
-  const calc = () => { if (!am.dataset.hand && kgI.value && pr.value) am.value = Math.round(kgI.value * pr.value * 100) / 100; updateSaleTotal(); };
-  kgI.oninput = pr.oninput = calc;
-  am.oninput = () => { am.dataset.hand = am.value ? '1' : ''; updateSaleTotal(); };
-  el.querySelector('[data-del]').onclick = () => { el.remove(); updateSaleTotal(); };
-  $('sl-items').appendChild(el);
-}
-
-function updateSaleTotal() {
-  const sum = [...document.querySelectorAll('#sl-items .amt')].reduce((a, i) => a + (+i.value || 0), 0);
-  $('sl-total').textContent = money(sum) + ' ' + state.cur;
-}
-
 async function loadOps() {
   const r = await api('GET', '/api/command');
   if (!r.ok) return;
-  fillGrades();
   const pend = r.data.filter((c) => c.status === 'pending').length;
   const qb = $('q-badge');
   if (qb) { qb.textContent = pend; qb.hidden = !pend; }
@@ -493,7 +543,7 @@ async function loadOps() {
 
 function openEdit(m) {
   state.edTarget = m;
-  fillGrades();
+  renderOpsTiles();
   $('ed-err').textContent = '';
   $('ed-title').textContent = `Исправить запись #${m.id}`;
   $('ed-grade').value = m.grade;
@@ -574,6 +624,7 @@ isPasskeySupported().then((ok) => {
   $('lg-pk').hidden = !ok;
   $('md-pk').hidden = !ok;
 });
+
 $('pd-cancel').onclick = () => $('pw-dlg').close();
 $('pd-ok').onclick = async () => {
   const r = state.pwTarget
@@ -596,6 +647,7 @@ $('refresh').onclick = async () => {
   if (state.tab === 'history') loadHistory();
   if (state.tab === 'queue') loadOps();
   if (state.tab === 'expenses') loadExpenses();
+  if (state.tab === 'refs') loadRefs();
   if (state.tab === 'users') loadUsers();
   if (state.tab === 'log') loadLog();
   toast('Обновлено');
@@ -608,10 +660,8 @@ document.querySelectorAll('[data-range]').forEach((b) => (b.onclick = () => {
     $('r-from').value = today.slice(0, 8) + '01';
     $('r-to').value = today;
   } else if (b.dataset.range === 'prevmonth') {
-    const firstPrev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastPrev = new Date(now.getFullYear(), now.getMonth(), 0);
-    $('r-from').value = iso(firstPrev);
-    $('r-to').value = iso(lastPrev);
+    $('r-from').value = iso(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    $('r-to').value = iso(new Date(now.getFullYear(), now.getMonth(), 0));
   } else {
     $('r-from').value = shift(+b.dataset.range);
     $('r-to').value = today;
@@ -679,26 +729,73 @@ $('u-add').onclick = async () => {
   loadUsers();
 };
 
+// ── Приход (вес берётся с большого табло весов) ──
 guard($('in-go'), async (id) => {
-  const ok = await sendCmd('intake', { grade: $('in-grade').value, net_kg: $('in-kg').value, worker: $('in-worker').value, note: $('in-note').value }, id);
-  if (ok) { $('in-kg').value = ''; $('in-note').value = ''; }
+  if (!state.selGrade.in) { toast('Выберите сорт', true); return false; }
+  const w = getActiveWeightKg();
+  if (!w.ok) { toast(w.error, true); return false; }
+  const ok = await sendCmd('intake', { grade: state.selGrade.in, net_kg: w.net, worker: '', note: $('in-note').value }, id);
+  if (ok) { $('in-note').value = ''; clearManualWeight(); }
   return ok;
 });
-guard($('wo-go'), async (id) => {
-  const ok = await sendCmd('writeoff', { grade: $('wo-grade').value, net_kg: $('wo-kg').value, reason: $('wo-reason').value }, id);
-  if (ok) { $('wo-kg').value = ''; $('wo-reason').value = ''; }
-  return ok;
-});
-$('sl-add').onclick = addSaleRow;
+
+// ── Продажа (выбор покупателя чипами + добавление позиций с весов) ──
+$('sl-new-cust').onclick = async () => {
+  const name = await askText({ title: 'Новый покупатель', label: 'Название или имя', placeholder: 'Напр. Корзинка', okText: 'Добавить' });
+  if (!name) return;
+  const r = await api('POST', '/api/status?resource=refs', { target: 'customer', name });
+  if (!r.ok) { toast(errMsg(r), true); return; }
+  state.customers.push(r.data.customer);
+  state.selCustomer = r.data.customer.name;
+  renderCustomerChips();
+  toast('Покупатель добавлен');
+};
+
+$('sl-add-pos').onclick = () => {
+  if (!state.selGrade.sl) return toast('Выберите сорт', true);
+  const w = getActiveWeightKg();
+  if (!w.ok) return toast(w.error, true);
+  const priceRaw = $('sl-price').value;
+  const price = priceRaw === '' ? null : Number(priceRaw);
+  const ovRaw = $('sl-amt-ov').value;
+  const amount = ovRaw !== '' ? Number(ovRaw) : (price != null ? Math.round(w.net * price * 100) / 100 : 0);
+  if (!Number.isFinite(amount) || amount < 0) return toast('Неверная сумма', true);
+  state.saleCart.push({ grade: state.selGrade.sl, net_kg: w.net, price_per_kg: price, amount });
+  $('sl-amt-ov').value = '';
+  clearManualWeight();
+  renderSaleCart();
+};
+
 guard($('sl-go'), async (id) => {
-  const items = [...document.querySelectorAll('#sl-items .sitem')].map((el) => ({
-    grade: el.querySelector('select').value,
-    net_kg: el.querySelector('.kg').value,
-    price_per_kg: el.querySelector('.price').value,
-    amount: el.querySelector('.amt').value,
-  }));
-  const ok = await sendCmd('sale', { customer: $('sl-cust').value, note: $('sl-note').value, items }, id);
-  if (ok) { $('sl-items').innerHTML = ''; $('sl-cust').value = ''; $('sl-note').value = ''; addSaleRow(); updateSaleTotal(); }
+  if (!state.selCustomer) { toast('Выберите покупателя', true); return false; }
+  if (!state.saleCart.length) { toast('Добавьте хотя бы одну позицию', true); return false; }
+  const ok = await sendCmd('sale', { customer: state.selCustomer, note: $('sl-note').value, items: state.saleCart }, id);
+  if (ok) {
+    state.saleCart = [];
+    $('sl-note').value = '';
+    $('sl-price').value = '';
+    $('sl-amt-ov').value = '';
+    renderSaleCart();
+  }
+  return ok;
+});
+
+// ── Списание (плитки сортов + чипы причин + вес с табло) ──
+$('wo-reasons').onclick = (e) => {
+  const b = e.target.closest('[data-r]');
+  if (!b) return;
+  state.woReason = b.dataset.r;
+  document.querySelectorAll('#wo-reasons .chip').forEach((c) => c.classList.toggle('sel', c === b));
+};
+
+guard($('wo-go'), async (id) => {
+  if (!state.selGrade.wo) { toast('Выберите сорт', true); return false; }
+  const w = getActiveWeightKg();
+  if (!w.ok) { toast(w.error, true); return false; }
+  const extra = $('wo-reason').value.trim();
+  const reason = extra ? `${state.woReason}: ${extra}` : state.woReason;
+  const ok = await sendCmd('writeoff', { grade: state.selGrade.wo, net_kg: w.net, reason }, id);
+  if (ok) { $('wo-reason').value = ''; clearManualWeight(); }
   return ok;
 });
 
@@ -747,5 +844,13 @@ initExpenses({
   cur: () => state.cur,
   toast,
   askText,
+});
+initRefs({
+  toast,
+  askText,
+  onRefsChanged: async () => {
+    const s = await api('GET', '/api/status');
+    if (s.ok) paintStatus(s.data);
+  },
 });
 start();

@@ -22,6 +22,7 @@
   <symbol id="i-wo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
   <symbol id="i-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1Z M8 5H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2 M9.5 13.5 11 15l3.5-3.5"/></symbol>
   <symbol id="i-exp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16l-2.5-1.5L14 20l-2-1.5L10 20l-2.5-1.5L5 20V4Z M9 9h6 M9 13h4"/></symbol>
+  <symbol id="i-refs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16 M4 12h16 M4 18h10 M17 16l3 3 M20 16l-3 3"/></symbol>
   <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1 M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7 M21 19v-1a4 4 0 0 0-3-3.9 M15 4.2a3.5 3.5 0 0 1 0 6.6"/></symbol>
   <symbol id="i-log" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z M14 3v5h5 M9 13h6 M9 17h6"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14 M5 12h14"/></symbol>
@@ -119,51 +120,87 @@
       <div class="card"><div id="h-rows"></div></div>
     </section>
 
-    <section id="p-intake" hidden>
-      <h1 class="page">Приход</h1>
-      <p class="sub">Запись поступления на склад — сразу обновляет остатки на сайте.</p>
-      <div class="card stack" id="f-intake">
-        <div><label class="f" for="in-grade">Сорт</label><select id="in-grade"></select></div>
-        <div><label class="f" for="in-kg">Вес нетто, кг</label><div class="wrow"><input id="in-kg" type="number" inputmode="decimal" step="0.001" min="0"><button class="btn sec sm sc-read" data-t="in-kg">С весов</button></div></div>
-        <input id="in-worker" placeholder="Кто собрал (необязательно)">
-        <input id="in-note" placeholder="Заметка (необязательно)">
-        <button class="btn block" id="in-go">Записать приход</button>
-      </div>
-    </section>
-
-    <section id="p-sale" hidden>
-      <h1 class="page">Продажа</h1>
-      <p class="sub">Оформление отгрузки покупателю — сразу проверяет остаток и обновляет сайт.</p>
-      <div class="card" id="f-sale">
-        <div class="field"><label class="f" for="sl-cust">Покупатель</label><input id="sl-cust" placeholder="Название или имя"></div>
-        <div id="sl-items"></div>
-        <button class="btn sec block" id="sl-add" style="margin-bottom:12px">+ Позиция</button>
-        <input id="sl-note" placeholder="Заметка (необязательно)" style="margin-bottom:12px">
-        <div class="muted" style="margin-bottom:12px">Итого: <b id="sl-total" style="color:var(--ink)">0</b></div>
-        <button class="btn block" id="sl-go">Оформить продажу</button>
-      </div>
-    </section>
-
-    <section id="p-writeoff" hidden>
-      <h1 class="page">Списание</h1>
-      <p class="sub">Списание брака, порчи или усушки со склада.</p>
-      <div class="card stack" id="f-writeoff">
-        <div><label class="f" for="wo-grade">Сорт</label><select id="wo-grade"></select></div>
-        <div><label class="f" for="wo-kg">Вес, кг</label><div class="wrow"><input id="wo-kg" type="number" inputmode="decimal" step="0.001" min="0"><button class="btn sec sm sc-read" data-t="wo-kg">С весов</button></div></div>
-        <input id="wo-reason" placeholder="Причина (усушка, порча, брак...)">
-        <button class="btn block" id="wo-go">Списать</button>
-      </div>
-    </section>
-
-    <div id="ops-shared" hidden>
+    <div id="ops-shell" hidden>
       <div class="banner" id="ops-stale" hidden></div>
-      <details class="card scale-card" id="scale-card">
-        <summary><span>Весы (Web Serial)</span><span class="small muted" id="scale-pill">настройка</span></summary>
-        <div class="small muted" id="scale-state"></div>
-        <div class="acts"><button class="btn sec sm" id="sc-conn">Подключить весы</button><button class="btn sec sm" id="sc-off" hidden>Отключить</button></div>
-        <div style="margin-top:12px"><label class="f" for="tare-g">Вес пустого ящика, г (вычитается при чтении с весов)</label><input id="tare-g" type="number" inputmode="decimal" min="0" value="0"></div>
-        <div class="small muted" style="margin-top:10px">Вес, введённый на сайте или считанный через браузер, записывается как ручной: программа на складе не может проверить, что число с весов.</div>
-      </details>
+      <div class="ops-wrap">
+        <div class="scale-col">
+          <div class="scale-panel">
+            <div class="sc-cap"><span>Весы · Нетто</span><button class="btn sec sm" id="sc-mode-btn" hidden>Ввести вручную</button></div>
+            <div class="sc-digits" id="sc-digits">0.000<small>кг</small></div>
+            <div class="sc-stat" id="sc-stat">Ручной ввод веса</div>
+            <div class="sc-manual-box" id="sc-manual-box">
+              <label class="f" for="sc-manual-in">Вес нетто, кг</label>
+              <input id="sc-manual-in" type="number" inputmode="decimal" step="0.001" min="0" placeholder="0.000">
+            </div>
+            <div class="sc-meta">
+              <span>Брутто на весах</span><b id="sc-gross">—</b>
+              <label for="tare-g">Тара (пустой ящик), г</label><input id="tare-g" type="number" inputmode="decimal" min="0" value="0">
+            </div>
+            <div class="acts" style="margin-top:12px">
+              <button class="btn sec sm" id="sc-conn">Подключить весы</button>
+              <button class="btn sec sm" id="sc-off" hidden>Отключить весы</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ops-main">
+          <section id="p-intake" hidden>
+            <h1 class="page">Приход</h1>
+            <p class="sub">Выберите сорт, взвесьте ящик и нажмите «Записать приход»</p>
+            <div class="card stack" id="f-intake">
+              <div><label class="f">Сорт</label><div class="grade-grid" id="in-grades"></div></div>
+              <input id="in-note" placeholder="Заметка (необязательно)">
+              <button class="btn block touch" id="in-go">Записать приход</button>
+            </div>
+          </section>
+
+          <section id="p-sale" hidden>
+            <h1 class="page">Продажа</h1>
+            <p class="sub">Выберите покупателя, добавляйте взвешенные позиции и проведите продажу</p>
+            <div class="card stack" id="f-sale">
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <label class="f" style="margin:0">Покупатель</label>
+                  <button class="btn sec sm" type="button" id="sl-new-cust">+ Новый</button>
+                </div>
+                <div class="cust-chips" id="sl-cust-chips"></div>
+              </div>
+              <div><label class="f">Сорт позиции</label><div class="grade-grid" id="sl-grades"></div></div>
+              <div class="daterow">
+                <div><label class="f" for="sl-price">Цена за кг</label><input id="sl-price" type="number" inputmode="decimal" min="0" placeholder="0"></div>
+                <div><label class="f" for="sl-amt-ov">Сумма (авто или вручную)</label><input id="sl-amt-ov" type="number" inputmode="decimal" min="0" placeholder="авто"></div>
+              </div>
+              <button class="btn sec block touch" type="button" id="sl-add-pos">+ Взвесить и добавить позицию</button>
+              <div class="stack" id="sl-cart"></div>
+              <input id="sl-note" placeholder="Заметка к продаже (необязательно)">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:16px">
+                <span class="muted">Итого к оплате:</span>
+                <b id="sl-total" style="font-size:22px">0</b>
+              </div>
+              <button class="btn block touch" id="sl-go">Оформить продажу</button>
+            </div>
+          </section>
+
+          <section id="p-writeoff" hidden>
+            <h1 class="page">Списание</h1>
+            <p class="sub">Выберите сорт и причину, затем спишите вес с табло весов</p>
+            <div class="card stack" id="f-writeoff">
+              <div><label class="f">Сорт</label><div class="grade-grid" id="wo-grades"></div></div>
+              <div>
+                <label class="f">Причина списания</label>
+                <div class="cust-chips" id="wo-reasons">
+                  <button class="chip sel" type="button" data-r="Брак">Брак</button>
+                  <button class="chip" type="button" data-r="Порча">Порча</button>
+                  <button class="chip" type="button" data-r="Усушка">Усушка</button>
+                  <button class="chip" type="button" data-r="Другое">Другое</button>
+                </div>
+              </div>
+              <input id="wo-reason" placeholder="Комментарий к списанию (необязательно)">
+              <button class="btn block touch" id="wo-go">Списать</button>
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
 
     <section id="p-queue" hidden>
@@ -201,6 +238,30 @@
         <select id="e-cat-filter" aria-label="Категория"><option value="">Все категории</option></select>
       </div>
       <div class="card"><div id="e-rows"></div></div>
+    </section>
+
+    <section id="p-refs" hidden>
+      <h1 class="page">Справочники</h1>
+      <p class="sub">Сорта продукции и список покупателей для быстрого выбора на экране склада</p>
+      <div class="card">
+        <h2>Сорта</h2>
+        <div class="wrow" style="margin-bottom:14px">
+          <input id="ref-g-name" placeholder="Новый сорт (напр. Экстра)">
+          <button class="btn" id="ref-g-add">Добавить</button>
+        </div>
+        <ul class="list" id="ref-grades"></ul>
+      </div>
+      <div class="card">
+        <h2>Покупатели</h2>
+        <div class="stack" style="margin-bottom:14px">
+          <div class="daterow">
+            <input id="ref-c-name" placeholder="Название или имя покупателя">
+            <input id="ref-c-phone" placeholder="Телефон (необязательно)">
+          </div>
+          <button class="btn block" id="ref-c-add">Добавить покупателя</button>
+        </div>
+        <ul class="list" id="ref-customers"></ul>
+      </div>
     </section>
 
     <section id="p-users" hidden>

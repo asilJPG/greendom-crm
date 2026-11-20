@@ -8,6 +8,7 @@
     { "source": "/writeoff", "destination": "/index.html" },
     { "source": "/queue", "destination": "/index.html" },
     { "source": "/expenses", "destination": "/index.html" },
+    { "source": "/refs", "destination": "/index.html" },
     { "source": "/users", "destination": "/index.html" },
     { "source": "/log", "destination": "/index.html" }
   ],

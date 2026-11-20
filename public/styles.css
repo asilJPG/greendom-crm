@@ -348,6 +348,54 @@ dialog#inv-dlg { width: min(640px, 100%); }
   .inv-sheet { font-size: 13pt; }
 }
 
+/* ───── сенсорный моноблок: большое табло весов + крупные плитки сортов и покупателей ───── */
+.ops-wrap { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 900px) {
+  .ops-wrap { grid-template-columns: 330px 1fr; }
+  .scale-col { position: sticky; top: 68px; }
+}
+.scale-panel { background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 18px; }
+.sc-cap { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); }
+.sc-digits { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 52px; font-weight: 700; letter-spacing: -.03em; line-height: 1.08; margin: 10px 0 4px; font-variant-numeric: tabular-nums; color: #b5b5ba; transition: color .15s; }
+.sc-digits small { font-size: 20px; font-weight: 500; margin-left: 6px; color: var(--mut); letter-spacing: 0; }
+.sc-digits.stable { color: var(--grn); }
+.sc-digits.settling { color: var(--amb); }
+.sc-digits.manual { color: var(--ink); }
+.sc-stat { font-size: 14px; font-weight: 600; color: var(--mut); min-height: 21px; }
+.sc-stat.stable { color: var(--grn); }
+.sc-stat.settling { color: var(--amb); }
+.sc-meta { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; font-size: 13.5px; color: var(--ink2); }
+.sc-meta input { width: 100px; min-height: 38px; padding: 6px 10px; text-align: right; }
+.sc-manual-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.sc-manual-box input { font-size: 20px; font-weight: 600; min-height: 50px; }
+
+.grade-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; }
+.gtile { --gc: #1b1b1b; text-align: left; padding: 14px; border-radius: 12px; border: 2px solid var(--line); background: #fff; min-height: 76px; transition: border-color .12s, background .12s, transform .06s; }
+.gtile::before { content: ""; display: block; width: 26px; height: 4px; border-radius: 3px; background: var(--gc); margin-bottom: 8px; }
+.gtile b { display: block; font-size: 16px; color: var(--ink); font-weight: 600; }
+.gtile small { display: block; font-size: 12.5px; color: var(--mut); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.gtile:active { transform: scale(.98); }
+.gtile.sel { border-color: var(--btn); background: var(--soft); }
+.btn.touch { min-height: 54px; font-size: 16.5px; font-weight: 600; border-radius: 12px; }
+
+.cust-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.cust-chips .chip { min-height: 44px; padding: 8px 16px; font-size: 14.5px; }
+.sale-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+
+/* ───── ОПиУ (P&L как в iiko) ───── */
+.pnl-wrap { overflow-x: auto; }
+.pnl-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pnl-tbl th, .pnl-tbl td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.pnl-tbl th { font-size: 12px; color: var(--ink2); font-weight: 600; background: var(--soft); }
+.pnl-tbl .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pnl-grp td { font-weight: 700; background: rgba(0, 0, 0, .02); color: var(--ink); }
+.pnl-sub td:first-child { padding-left: 24px; color: var(--ink2); }
+.pnl-info td { font-size: 13px; color: var(--mut); }
+.pnl-total td { font-weight: 800; font-size: 15px; border-top: 2px solid var(--ink); border-bottom: 0; padding-top: 12px; }
+.pnl-total.pos td { color: var(--grn); background: var(--grn-bg); }
+.pnl-total.neg td { color: var(--red); background: var(--red-bg); }
+@media (max-width: 640px) { .hide-sm { display: none; } }
+
 /* широкий экран: закреплённая левая панель #f1f1f1 */
 @media (min-width: 1000px) {
   #burger, #drawer-close { display: none; }
@@ -356,6 +404,6 @@ dialog#inv-dlg { width: min(640px, 100%); }
   .topbar { background: var(--bg); padding: 0 28px 0 calc(var(--dw) + 28px); height: 52px; }
   .topbar .brand { display: none; }
   main { margin-left: var(--dw); padding: 24px 32px 48px; max-width: none; }
-  main > section, #ops-shared { max-width: 920px; margin: 0 auto; }
+  main > section, #ops-shell { max-width: 1020px; margin: 0 auto; }
   h1.page { font-size: 28px; }
 }

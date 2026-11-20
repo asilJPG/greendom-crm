@@ -542,12 +542,15 @@ test('расходы: категории, акты расхода, права, �
   assert.equal(cat.code, 200);
   assert.equal((await expReq('POST', { target: 'category', name: 'аренда теплицы' }, admin)).code, 409, 'дубликат категории');
 
-  // Создание акта расхода (директор не может)
-  assert.equal((await expReq('POST', { target: 'expense', category_id: cat.body.category.id, amount: 100000 }, dir)).code, 403);
+  // Создание акта расхода: складовщик не имеет доступа (403), офисные роли (admin/director) могут
+  const { cookie: keeper } = await signIn('keeper-new-pass-1');
+  assert.equal((await expReq('GET', undefined, keeper)).code, 403, 'складовщик не видит расходы');
+  assert.equal((await call(report, { query: { from: today, to: today }, ...as(keeper) })).code, 403, 'складовщик не видит отчёт ОПиУ');
+  assert.equal((await expReq('POST', { target: 'expense', category_id: cat.body.category.id, amount: 100000 }, keeper)).code, 403);
   const act = await expReq('POST', {
     target: 'expense', doc_date: today, category_id: cat.body.category.id, amount: 150000,
     counterparty: 'АгроСнаб', payment_method: 'transfer', comment: 'Аванс',
-  }, admin);
+  }, dir);
   assert.equal(act.code, 200);
 
   // Отчёт учитывает расходы и чистую прибыль (выручка - расходы)
@@ -561,4 +564,21 @@ test('расходы: категории, акты расхода, права, �
   assert.equal(canc.code, 200);
   const rep2 = await call(report, { query: { from: today, to: today }, ...as(admin) });
   assert.equal(rep2.body.summary.expenses_total, 0);
+});
+
+test('справочники: динамические сорта и покупатели без хардкода', async () => {
+  await globalThis.__TEST_DB.query('DELETE FROM login_fails');
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const { cookie: keeper } = await signIn('keeper-new-pass-1');
+  const refReq = (method, body, cookie) => call(status, { method, query: { resource: 'refs' }, body, ...as(cookie) });
+
+  assert.equal((await refReq('POST', { target: 'grade', name: 'Экстра' }, keeper)).code, 403, 'сорта создаёт только админ');
+  const g = await refReq('POST', { target: 'grade', name: 'Экстра' }, admin);
+  assert.equal(g.code, 200);
+  const c = await refReq('POST', { target: 'customer', name: 'Хавас', phone: '+998901112233' }, keeper);
+  assert.equal(c.code, 200, 'складовщик может добавить нового покупателя прямо из продажи');
+
+  const st = await call(status, as(admin));
+  assert.ok(st.body.grades.includes('Экстра'));
+  assert.ok(st.body.customers.some((x) => x.name === 'Хавас'));
 });

@@ -1,4 +1,4 @@
-// Модуль отчётности: KPI со сравнением периодов, % потерь, SVG-график, вкладки разрезов, фильтры и выгрузка Excel.
+// Отчёт о прибылях и убытках (ОПиУ / P&L как в iiko): иерархическая таблица, KPI, график, По дням, Покупатели и Excel.
 import { api } from './api.js';
 import { openInvoice } from './invoice.js';
 
@@ -9,13 +9,13 @@ const money = (v) => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDig
 const dm = (s) => s.slice(8, 10) + '.' + s.slice(5, 7);
 
 let lastData = null;
-let subTab = 'summary'; // summary | days | buyers
+let subTab = 'pnl'; // pnl | days | buyers
 let chartMetric = 'amount'; // amount | out_kg | in_kg
 let deps = { cur: () => 'сум', crop: () => 'Клубника', gradeColor: () => '#1b1b1b', openHistoryDay: () => {} };
 
 function deltaBadge(cur, prev, invert = false) {
-  if (!prev || prev <= 0) return '';
-  const pct = Math.round(((cur - prev) / prev) * 100);
+  if (!prev || prev === 0) return '';
+  const pct = Math.round(((cur - prev) / Math.abs(prev)) * 100);
   if (pct === 0) return `<span class="delta">0%</span>`;
   const good = invert ? pct < 0 : pct > 0;
   const arrow = pct > 0 ? '▲' : '▼';
@@ -31,7 +31,7 @@ function renderBarChart(days) {
   const max = Math.max(...vals, 0.001);
 
   const W = 680;
-  const H = 180;
+  const H = 175;
   const padB = 26;
   const padT = 12;
   const chartH = H - padB - padT;
@@ -77,81 +77,105 @@ function renderBarChart(days) {
     </div>`;
 }
 
-function renderSummary(d) {
+// Классический Отчёт о прибылях и убытках (ОПиУ / P&L как в iiko)
+function renderPnl(d) {
   const s = d.summary;
   const p = d.prev;
   const cur = deps.cur();
-
-  const stackBar = d.by_grade.length && s.amount > 0
-    ? `<div class="stackbar">${d.by_grade.filter((g) => g.share_pct > 0).map((g) =>
-        `<span style="width:${g.share_pct}%;background:${deps.gradeColor(g.grade)}" title="${esc(g.grade)}: ${g.share_pct}%"></span>`
-      ).join('')}</div>`
-    : '';
-
-  const gradeRows = d.by_grade.map((x) => `
-    <li class="li">
-      <div class="l">
-        <div class="t"><span class="sw" style="--gc:${deps.gradeColor(x.grade)};margin-right:8px"></span>${esc(x.grade)}${x.share_pct ? ` <span class="small muted" style="font-weight:500">${x.share_pct}%</span>` : ''}</div>
-        <div class="s">приход ${kg(x.in_kg)} · продано ${kg(x.out_kg)} · списано ${kg(x.writeoff_kg)}${x.avg_price ? ` · ср. ${money(x.avg_price)}` : ''}</div>
-      </div>
-      <div class="r">${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></div>
-    </li>`).join('');
-
-  const expRows = (d.by_expense_category || []).map((x) => `
-    <li class="li">
-      <div class="l">
-        <div class="t">${esc(x.category)} <span class="small muted" style="font-weight:500">${x.share_pct}%</span></div>
-        <div class="s">актов: ${x.acts}</div>
-        <div class="prog"><span style="width:${Math.min(100, x.share_pct)}%"></span></div>
-      </div>
-      <div class="r">${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></div>
-    </li>`).join('');
-
   const profitNeg = (s.net_profit || 0) < 0;
+  const expPctOfRev = s.amount > 0 ? Math.round((s.expenses_total / s.amount) * 1000) / 10 : 0;
+
+  const gradeSubRows = d.by_grade.filter((g) => g.amount > 0 || g.out_kg > 0).map((g) => `
+    <tr class="pnl-sub">
+      <td><span class="sw" style="--gc:${deps.gradeColor(g.grade)};margin-right:8px"></span>${esc(g.grade)} <span class="small muted">(${kg(g.out_kg)} кг${g.avg_price ? ` × ${money(g.avg_price)}` : ''})</span></td>
+      <td class="num">${money(g.amount)}</td>
+      <td class="num muted">${g.share_pct}%</td>
+      <td class="num muted hide-sm">—</td>
+    </tr>`).join('');
+
+  const expSubRows = (d.by_expense_category || []).map((e) => `
+    <tr class="pnl-sub">
+      <td>${esc(e.category)} <span class="small muted">(актов: ${e.acts})</span></td>
+      <td class="num">−${money(e.amount)}</td>
+      <td class="num muted">${e.rev_pct || 0}%</td>
+      <td class="num muted hide-sm">${e.share_pct}% расх.</td>
+    </tr>`).join('') || `<tr class="pnl-sub"><td colspan="4" class="muted">Актов расхода за период нет</td></tr>`;
+
   return `
     <div class="kpis kpis4">
       <div class="kpi">
         <div class="k">Выручка ${deltaBadge(s.amount, p.amount)}</div>
         <div class="v">${money(s.amount)} <small>${esc(cur)}</small></div>
-        <div class="subk">пред. период: ${money(p.amount)}</div>
+        <div class="subk">${kg(s.out_kg)} кг · ср. ${s.avg_price ? money(s.avg_price) : '—'}</div>
       </div>
       <div class="kpi">
-        <div class="k">Расходы ${deltaBadge(s.expenses_total, p.expenses_total, true)}</div>
+        <div class="k">Операционные расходы ${deltaBadge(s.expenses_total, p.expenses_total, true)}</div>
         <div class="v">${money(s.expenses_total)} <small>${esc(cur)}</small></div>
-        <div class="subk">пред. период: ${money(p.expenses_total)}</div>
+        <div class="subk">${expPctOfRev}% от выручки</div>
       </div>
       <div class="kpi">
         <div class="k">Чистая прибыль ${deltaBadge(s.net_profit, p.net_profit)}</div>
-        <div class="v" style="${profitNeg ? 'color:var(--red)' : ''}">${money(s.net_profit)} <small>${esc(cur)}</small></div>
-        <div class="subk">выручка − расходы</div>
+        <div class="v" style="${profitNeg ? 'color:var(--red)' : 'color:var(--grn)'}">${money(s.net_profit)} <small>${esc(cur)}</small></div>
+        <div class="subk">пред. период: ${money(p.net_profit)}</div>
       </div>
       <div class="kpi">
-        <div class="k">Продано ${deltaBadge(s.out_kg, p.out_kg)}</div>
-        <div class="v">${kg(s.out_kg)} <small>кг</small></div>
-        <div class="subk">ср. цена: ${s.avg_price ? money(s.avg_price) + ' ' + esc(cur) + '/кг' : '—'}</div>
-      </div>
-      <div class="kpi">
-        <div class="k">Собрано (приход) ${deltaBadge(s.in_kg, p.in_kg)}</div>
-        <div class="v">${kg(s.in_kg)} <small>кг</small></div>
-        <div class="subk">пред. период: ${kg(p.in_kg)} кг</div>
-      </div>
-      <div class="kpi">
-        <div class="k">Потери (списание + брак) ${deltaBadge(s.loss_kg, p.loss_kg, true)}</div>
-        <div class="v">${kg(s.loss_kg)} <small>кг</small></div>
-        <div class="subk">${s.loss_pct}% от сбора (списано ${kg(s.writeoff_kg)})</div>
+        <div class="k">Рентабельность</div>
+        <div class="v">${s.margin_pct || 0}<small>%</small></div>
+        <div class="subk">потери: ${kg(s.loss_kg)} кг (${s.loss_pct}%)</div>
       </div>
     </div>
-    <div class="muted small" style="margin:-2px 2px 14px">
-      Продаж: <b>${s.sales_count}</b> · Ручных записей веса: <b>${d.manual_entries}</b> · Отменённых: <b>${d.cancelled_entries}</b>
-      <span style="margin-left:6px">· сравнение с ${dm(p.from)}–${dm(p.to)}</span>
-    </div>
-    ${renderBarChart(d.by_day)}
+
     <div class="card">
-      <h2>По сортам</h2>
-      ${stackBar}
-      ${gradeRows ? `<ul class="list">${gradeRows}</ul>` : '<div class="empty">Нет данных за период</div>'}
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <h2 style="margin:0">Отчёт о прибылях и убытках (ОПиУ)</h2>
+        <span class="small muted">сравнение с ${dm(p.from)}–${dm(p.to)}</span>
+      </div>
+      <div class="pnl-wrap">
+        <table class="pnl-tbl">
+          <thead>
+            <tr>
+              <th>Статья</th>
+              <th class="num">Сумма, ${esc(cur)}</th>
+              <th class="num">% выр.</th>
+              <th class="num hide-sm">Пред. период</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="pnl-grp">
+              <td>+ Выручка от реализации</td>
+              <td class="num">${money(s.amount)}</td>
+              <td class="num">100%</td>
+              <td class="num hide-sm">${money(p.amount)} ${deltaBadge(s.amount, p.amount)}</td>
+            </tr>
+            ${gradeSubRows}
+            <tr class="pnl-grp">
+              <td>− Операционные расходы</td>
+              <td class="num">−${money(s.expenses_total)}</td>
+              <td class="num">${expPctOfRev}%</td>
+              <td class="num hide-sm">−${money(p.expenses_total)} ${deltaBadge(s.expenses_total, p.expenses_total, true)}</td>
+            </tr>
+            ${expSubRows}
+            <tr class="pnl-info">
+              <td>Справочно: потери (списание + брак)</td>
+              <td class="num muted">${kg(s.loss_kg)} кг${s.loss_value ? ` (~${money(s.loss_value)})` : ''}</td>
+              <td class="num muted">${s.loss_pct}% сб.</td>
+              <td class="num muted hide-sm">${kg(p.loss_kg)} кг</td>
+            </tr>
+            <tr class="pnl-total ${profitNeg ? 'neg' : 'pos'}">
+              <td>= ЧИСТАЯ ПРИБЫЛЬ</td>
+              <td class="num">${money(s.net_profit)} ${esc(cur)}</td>
+              <td class="num">${s.margin_pct || 0}%</td>
+              <td class="num hide-sm">${money(p.net_profit)} ${deltaBadge(s.net_profit, p.net_profit)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-    ${expRows ? `<div class="card"><h2>Расходы по категориям</h2><ul class="list">${expRows}</ul></div>` : ''}`;
+
+    <div class="muted small" style="margin:-2px 2px 14px">
+      Собрано: <b>${kg(s.in_kg)} кг</b> · Продано: <b>${kg(s.out_kg)} кг</b> (${s.sales_count} отгр.) · Ручных весов: <b>${d.manual_entries}</b> · Отменённых: <b>${d.cancelled_entries}</b>
+    </div>
+    ${renderBarChart(d.by_day)}`;
 }
 
 function renderDays(d) {
@@ -205,18 +229,14 @@ function renderBody() {
   const d = lastData;
   const tabsHtml = `
     <div class="seg" id="r-subtabs">
-      <button class="${subTab === 'summary' ? 'sel' : ''}" data-st="summary">Сводка</button>
+      <button class="${subTab === 'pnl' ? 'sel' : ''}" data-st="pnl">ОПиУ (P&amp;L)</button>
       <button class="${subTab === 'days' ? 'sel' : ''}" data-st="days">По дням</button>
       <button class="${subTab === 'buyers' ? 'sel' : ''}" data-st="buyers">Покупатели</button>
     </div>`;
 
-  const content = subTab === 'summary' ? renderSummary(d)
-    : subTab === 'days' ? renderDays(d)
-    : renderBuyers(d);
-
+  const content = subTab === 'pnl' ? renderPnl(d) : subTab === 'days' ? renderDays(d) : renderBuyers(d);
   $('r-body').innerHTML = tabsHtml + content;
 
-  // Переключение вкладок внутри отчёта
   $('r-subtabs').onclick = (e) => {
     const b = e.target.closest('[data-st]');
     if (!b) return;
@@ -224,7 +244,6 @@ function renderBody() {
     renderBody();
   };
 
-  // Переключение метрики графика + наведение/тап по столбикам
   const chM = $('ch-metrics');
   if (chM) {
     chM.onclick = (e) => {
@@ -247,12 +266,10 @@ function renderBody() {
     });
   }
 
-  // Клик по дню -> переход в Историю за этот день
   $('r-body').querySelectorAll('[data-day]').forEach((el) => {
     el.onclick = () => deps.openHistoryDay(el.dataset.day);
   });
 
-  // Кнопка «Накладная» у покупателей
   const salesIndex = Object.fromEntries(d.sales.map((s) => [`${s.device}:${s.sale_id}`, s]));
   $('r-body').querySelectorAll('[data-inv]').forEach((b) => {
     b.onclick = () => {
@@ -296,7 +313,5 @@ export function initReport(config) {
   deps = config;
   $('r-grade').onchange = loadReport;
   $('r-cust').onchange = loadReport;
-  $('r-csv').onclick = () => {
-    window.location.href = buildReportQuery('csv');
-  };
+  $('r-csv').onclick = () => { window.location.href = buildReportQuery('csv'); };
 }

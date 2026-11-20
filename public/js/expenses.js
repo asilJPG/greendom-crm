@@ -69,7 +69,7 @@ export async function loadExpenses() {
   setDefaultPeriod();
   const me = deps.me();
   const cur = deps.cur();
-  $('e-open-add').hidden = !(me && (me.role === 'admin' || me.role === 'keeper'));
+  $('e-open-add').hidden = !(me && (me.role === 'admin' || me.role === 'director'));
   $('e-open-cats').hidden = !(me && me.role === 'admin');
 
   const qs = new URLSearchParams({ resource: 'expenses', from: $('e-from').value, to: $('e-to').value });

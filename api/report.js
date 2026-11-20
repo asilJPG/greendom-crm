@@ -184,9 +184,13 @@ module.exports = handler(async (req, res) => {
   const pExp = Number(prevExpRow?.amount || 0);
   const netProfit = r2(totalAmt - expensesTotal);
   const pProfit = r2(pAmt - pExp);
+  const avgPrice = totalOut > 0 ? r2(totalAmt / totalOut) : null;
+  const lossValue = avgPrice ? r2(lossKg * avgPrice) : 0;
+  const marginPct = totalAmt > 0 ? Math.round((netProfit / totalAmt) * 1000) / 10 : 0;
   const by_expense_category = expByCat.map((x) => ({
     ...x,
     share_pct: expensesTotal > 0 ? Math.round((Number(x.amount) / expensesTotal) * 1000) / 10 : 0,
+    rev_pct: totalAmt > 0 ? Math.round((Number(x.amount) / totalAmt) * 1000) / 10 : 0,
   }));
 
   res.status(200).json({
@@ -199,10 +203,12 @@ module.exports = handler(async (req, res) => {
       brak_kg: brakIn,
       loss_kg: lossKg,
       loss_pct: lossPct,
+      loss_value: lossValue,
       amount: totalAmt,
       expenses_total: expensesTotal,
       net_profit: netProfit,
-      avg_price: totalOut > 0 ? r2(totalAmt / totalOut) : null,
+      margin_pct: marginPct,
+      avg_price: avgPrice,
       sales_count: sales.length,
     },
     prev: {
@@ -230,4 +236,4 @@ module.exports = handler(async (req, res) => {
     manual_entries: manual.n,
     cancelled_entries: cancelled.n,
   });
-}, { method: ['GET', 'POST', 'PATCH'] });
+}, { method: ['GET', 'POST', 'PATCH'], roles: ['director', 'admin'] });
