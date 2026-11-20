@@ -82,7 +82,24 @@ module.exports = async (req, res) => {
         Number.isInteger(b.pending) ? b.pending : 0,
       ]
     );
-    res.status(200).json({ ok: true, accepted: rows.length });
+
+    // ответы моноблока на операции с сайта (повтор безопасен: меняем только ещё не завершённые)
+    const acks = Array.isArray(b.acks) ? b.acks.slice(0, 100) : [];
+    for (const a of acks) {
+      if (!Number.isInteger(a.id) || !['applied', 'rejected'].includes(a.status)) continue;
+      await query(
+        `UPDATE commands SET status=$1, result=$2, done_ts=now() WHERE id=$3 AND device=$4 AND status IN ('pending','expired')`,
+        [a.status, String(a.result || '').slice(0, 300), a.id, device]
+      );
+    }
+    // операции, которые ждут выполнения; к сроку давности (сутки) операция больше не выполняется
+    await query(`UPDATE commands SET status='expired', result='не выполнена за сутки: моноблок не был на связи', done_ts=now()
+                 WHERE device=$1 AND status='pending' AND ts < now() - interval '24 hours'`, [device]);
+    const commands = await query(
+      `SELECT id, kind, payload, user_name, user_role FROM commands WHERE device=$1 AND status='pending' ORDER BY id LIMIT 20`,
+      [device]
+    );
+    res.status(200).json({ ok: true, accepted: rows.length, commands });
   } catch (e) {
     if (e.status === 400) return res.status(400).json({ error: e.message });
     console.error(e);

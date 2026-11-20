@@ -2,7 +2,7 @@ const { query } = require('../lib/db');
 const { handler } = require('../lib/http');
 const { MIN_PASSWORD, hashPassword, passwordTaken, audit } = require('../lib/auth');
 
-const ROLES = ['admin', 'viewer'];
+const ROLES = ['admin', 'director', 'keeper'];
 
 function cleanName(v) {
   const n = String(v || '').trim();
@@ -51,7 +51,7 @@ module.exports = handler(
       if (req.method === 'POST') {
         const name = cleanName(b.name);
         const password = cleanPassword(b.password);
-        const role = ROLES.includes(b.role) ? b.role : 'viewer';
+        const role = ROLES.includes(b.role) ? b.role : 'director';
         const [dup] = await query('SELECT 1 FROM app_users WHERE lower(name)=lower($1)', [name]);
         if (dup) return res.status(409).json({ error: 'Такое имя уже есть' });
         if (await passwordTaken(password)) return res.status(409).json({ error: 'Такой пароль уже используется, выберите другой' });

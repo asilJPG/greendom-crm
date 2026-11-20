@@ -2,137 +2,265 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#ffffff">
 <title>Склад: просмотр</title>
 <style>
-  :root { color-scheme: light; --bg:#fff; --card:#fff; --ink:#1b2620; --mut:#66736b; --line:#e6e9e4; --line2:#d3d9d0;
+  /* Мобильная вёрстка: сначала телефон, потом шире. Таблиц нет: списки и карточки; меню снизу, на широком экране слева. */
+  :root { color-scheme: light; --bg:#fff; --soft:#f5f7f4; --ink:#1b2620; --mut:#66736b; --line:#e6e9e4; --line2:#d3d9d0;
     --pri:#2c7a4e; --pri-d:#236340; --pri-bg:#e6f2ea; --bad:#b1362d; --bad-bg:#fbeae8; --warn:#a8650c; --warn-bg:#fcf0dc; --blue:#2a6aa8; --blue-bg:#e4edf7;
-    --shadow:0 1px 2px rgba(20,36,26,.05), 0 6px 18px rgba(20,36,26,.06); }
-  * { box-sizing:border-box; }
-  body { margin:0; font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    --shadow:0 1px 2px rgba(20,36,26,.05), 0 4px 14px rgba(20,36,26,.06); --r:16px; --nav:64px;
+    --sat:env(safe-area-inset-top, 0px); --sab:env(safe-area-inset-bottom, 0px); }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); overflow-wrap:anywhere; }
   [hidden] { display:none !important; }
   button, input, select { font:inherit; color:inherit; }
   button { cursor:pointer; }
-  input, select { width:100%; min-width:0; padding:12px 14px; border:1px solid var(--line2); border-radius:12px; background:#fff; }
+  input, select { width:100%; min-width:0; min-height:48px; padding:12px 14px; border:1px solid var(--line2); border-radius:12px; background:#fff; font-size:16px; } /* 16px: iOS не приближает страницу при вводе */
   input:focus, select:focus { outline:none; border-color:var(--pri); box-shadow:0 0 0 3px rgba(44,122,78,.18); }
   label.f { display:block; font-size:13px; color:var(--mut); margin:0 0 5px; }
-  h2 { margin:0 0 12px; font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--mut); font-weight:600; }
-  .wrap { max-width:1000px; margin:0 auto; padding:14px 16px 60px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; margin-bottom:14px; box-shadow:var(--shadow); overflow-x:auto; }
-  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  .grow { flex:1 1 0; min-width:150px; }
-  .btn { padding:12px 20px; border-radius:12px; border:0; background:var(--pri); color:#fff; font-weight:600; }
-  .btn:hover { background:var(--pri-d); }
-  .btn.sec { background:#fff; color:var(--ink); border:1px solid var(--line2); font-weight:500; } .btn.sec:hover { background:var(--pri-bg); }
-  .btn.sm { padding:7px 12px; font-size:14px; border-radius:10px; }
-  .btn:disabled { background:var(--line); color:var(--mut); cursor:not-allowed; }
-  .tabs { display:flex; gap:6px; margin:12px 0; overflow-x:auto; }
-  .tab { flex:none; padding:10px 18px; border-radius:999px; border:1px solid transparent; background:transparent; color:var(--mut); font-weight:500; }
-  .tab:hover { background:var(--pri-bg); color:var(--ink); } .tab.sel { background:var(--pri); color:#fff; font-weight:600; }
-  table { width:100%; border-collapse:collapse; font-size:15px; }
-  th { font-size:12px; letter-spacing:.03em; text-transform:uppercase; color:var(--mut); font-weight:600; }
-  td, th { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
-  tr:last-child td { border-bottom:0; }
-  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
   .muted { color:var(--mut); } .small { font-size:13px; }
-  .top { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  .logo { display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px; margin-right:auto; } .logo svg { width:26px; height:26px; color:var(--pri); }
-  .chipu { display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:999px; background:var(--pri-bg); font-size:14px; }
-  .av { width:26px; height:26px; border-radius:50%; background:var(--pri); color:#fff; display:grid; place-items:center; font-weight:700; font-size:13px; }
-  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background:var(--mut); } .dot.ok { background:var(--pri); } .dot.bad { background:var(--bad); }
-  .banner { background:var(--bad-bg); color:var(--bad); border:1px solid rgba(177,54,45,.35); border-radius:12px; padding:10px 14px; margin-top:10px; }
-  .kpi { display:flex; gap:28px; flex-wrap:wrap; } .kpi div { color:var(--mut); font-size:14px; } .kpi b { display:block; font-size:24px; color:var(--ink); font-variant-numeric:tabular-nums; }
-  .big { font-size:34px; font-weight:600; font-variant-numeric:tabular-nums; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
-  .gcard { border:1px solid var(--line); border-radius:14px; padding:14px; background:#fff; box-shadow:var(--shadow); }
-  .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; }
-  .b-in, .b-admin { background:var(--pri-bg); color:var(--pri); } .b-out, .b-viewer { background:var(--blue-bg); color:var(--blue); } .b-writeoff, .b-off { background:var(--warn-bg); color:var(--warn); }
-  tr.cancelled td { color:var(--mut); text-decoration:line-through; }
-  .center { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:20px; }
+
+  .btn { min-height:48px; padding:12px 20px; border-radius:12px; border:0; background:var(--pri); color:#fff; font-weight:600; }
+  .btn:active { background:var(--pri-d); }
+  .btn.sec { background:#fff; color:var(--ink); border:1px solid var(--line2); font-weight:500; }
+  .btn.sm { min-height:40px; padding:8px 14px; font-size:14px; border-radius:10px; }
+  .btn.block { width:100%; }
+  .btn:disabled { background:var(--line); color:var(--mut); }
+  .chip { min-height:40px; padding:8px 16px; border-radius:999px; border:1px solid var(--line2); background:#fff; font-size:15px; }
+  .chip.sel { background:var(--pri); border-color:var(--pri); color:#fff; font-weight:600; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; }
   .err { color:var(--bad); min-height:22px; font-size:15px; }
-  .toast { position:fixed; left:50%; bottom:22px; transform:translate(-50%,20px); opacity:0; pointer-events:none; padding:12px 20px; border-radius:14px; background:var(--ink); color:#fff; transition:opacity .2s, transform .2s; z-index:50; max-width:90vw; }
+
+  /* каркас */
+  .topbar { position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:10px; padding:calc(10px + var(--sat)) 14px 10px; background:rgba(255,255,255,.94); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+  .topbar .logo { display:flex; align-items:center; gap:8px; font-weight:700; font-size:18px; min-width:0; flex:1; }
+  .topbar .logo svg { width:24px; height:24px; color:var(--pri); flex:none; }
+  .topbar .logo span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .live { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--mut); flex:none; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--mut); flex:none; } .dot.ok { background:var(--pri); } .dot.bad { background:var(--bad); }
+  .iconbtn { width:44px; height:44px; border-radius:50%; border:1px solid var(--line); background:#fff; display:grid; place-items:center; flex:none; padding:0; }
+  .iconbtn svg { width:22px; height:22px; }
+  .av { width:44px; height:44px; border-radius:50%; background:var(--pri); color:#fff; border:0; font-weight:700; font-size:17px; }
+  main { padding:14px 14px calc(var(--nav) + var(--sab) + 18px); max-width:760px; margin:0 auto; }
+  .banner { background:var(--bad-bg); color:var(--bad); border:1px solid rgba(177,54,45,.35); border-radius:12px; padding:10px 14px; margin-bottom:12px; font-size:14px; }
+
+  .nav { position:fixed; left:0; right:0; bottom:0; z-index:30; display:flex; background:rgba(255,255,255,.97); backdrop-filter:blur(10px); border-top:1px solid var(--line); padding-bottom:var(--sab); }
+  .nav button { flex:1; min-height:var(--nav); border:0; background:transparent; color:var(--mut); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:11px; font-weight:500; padding:6px 2px; position:relative; }
+  .nav button svg { width:24px; height:24px; }
+  .nav button.sel { color:var(--pri); font-weight:700; }
+  .nav button.sel::before { content:""; position:absolute; top:0; left:25%; right:25%; height:3px; border-radius:0 0 3px 3px; background:var(--pri); }
+
+  /* блоки */
+  .card { background:#fff; border:1px solid var(--line); border-radius:var(--r); padding:16px; margin-bottom:12px; box-shadow:var(--shadow); }
+  .card h2 { margin:0 0 10px; font-size:12px; letter-spacing:.05em; text-transform:uppercase; color:var(--mut); font-weight:600; }
+  .hero { background:var(--pri); color:#fff; border-radius:var(--r); padding:18px 18px 16px; margin-bottom:12px; }
+  .hero .lbl { font-size:13px; opacity:.85; letter-spacing:.04em; text-transform:uppercase; }
+  .hero .num { font-size:44px; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums; } .hero .num small { font-size:20px; font-weight:500; opacity:.85; margin-left:6px; }
+  .gcards { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:10px; margin-bottom:12px; }
+  .gcard { background:#fff; border:1px solid var(--line); border-radius:var(--r); padding:14px; box-shadow:var(--shadow); border-top:4px solid var(--gc, var(--pri)); }
+  .gcard .nm { font-size:14px; color:var(--mut); }
+  .gcard .bal { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.15; margin:2px 0 8px; } .gcard .bal small { font-size:14px; color:var(--mut); font-weight:500; }
+  .gcard .mini { display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px; font-size:11px; color:var(--mut); border-top:1px solid var(--line); padding-top:8px; }
+  .gcard .mini b { display:block; font-size:13px; color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:12px; }
+  .kpi { background:var(--soft); border-radius:14px; padding:12px 14px; } .kpi .k { font-size:12px; color:var(--mut); } .kpi .v { font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.25; } .kpi .v small { font-size:12px; color:var(--mut); font-weight:500; }
+
+  .list { margin:0; padding:0; list-style:none; }
+  .li { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); } .li:last-child { border-bottom:0; padding-bottom:0; } .li:first-child { padding-top:0; }
+  .li .l { flex:1; min-width:0; } .li .t { font-weight:600; } .li .s { font-size:13px; color:var(--mut); } .li .r { text-align:right; font-weight:600; font-variant-numeric:tabular-nums; flex:none; max-width:45%; }
+  .sw { width:12px; height:12px; border-radius:4px; background:var(--gc, var(--pri)); display:inline-block; margin-right:8px; flex:none; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; vertical-align:middle; }
+  .b-in, .b-admin { background:var(--pri-bg); color:var(--pri); } .b-out, .b-director { background:var(--blue-bg); color:var(--blue); } .b-writeoff, .b-keeper, .b-off { background:var(--warn-bg); color:var(--warn); }
+  .hi { display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); } .hi:last-child { border-bottom:0; }
+  .hi .bar { width:4px; border-radius:2px; background:var(--tc); flex:none; }
+  .hi.cancelled .t, .hi.cancelled .r { text-decoration:line-through; color:var(--mut); }
+  .acts { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .stack > * + * { margin-top:10px; }
+  .filters { display:grid; gap:10px; margin-bottom:12px; }
+  .daterow { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .wrow { display:flex; gap:8px; align-items:stretch; } .wrow input { flex:1; } .wrow .btn { flex:none; }
+  .sitem { border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:10px; background:var(--soft); }
+  .sitem .two { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .b-pending { background:var(--warn-bg); color:var(--warn); } .b-applied { background:var(--pri-bg); color:var(--pri); } .b-rejected { background:var(--bad-bg); color:var(--bad); } .b-expired { background:var(--soft); color:var(--mut); }
+  .empty { padding:24px 8px; text-align:center; color:var(--mut); }
+
+  /* вход */
+  .center { min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:20px 20px calc(20px + var(--sab)); }
+  .center .logo2 { display:flex; align-items:center; gap:10px; font-weight:700; font-size:24px; } .center .logo2 svg { width:32px; height:32px; color:var(--pri); }
+  .center .card { width:min(400px,100%); }
+  .field { margin-bottom:12px; }
+
+  /* окна: снизу на телефоне, по центру на широком */
+  dialog { border:0; padding:20px; background:#fff; box-shadow:0 20px 60px rgba(0,0,0,.3); width:min(460px,100%); border-radius:20px; }
+  dialog::backdrop { background:rgba(10,18,13,.5); }
+  dialog h3 { margin:0 0 14px; font-size:19px; }
+  @media (max-width: 640px) { dialog { margin:auto 0 0 0; width:100%; max-width:none; border-radius:22px 22px 0 0; padding-bottom:calc(20px + var(--sab)); } }
+  .toast { position:fixed; left:50%; bottom:calc(var(--nav) + var(--sab) + 14px); transform:translate(-50%,20px); opacity:0; pointer-events:none; padding:12px 18px; border-radius:14px; background:var(--ink); color:#fff; transition:opacity .2s, transform .2s; z-index:60; max-width:90vw; font-size:15px; }
   .toast.show { opacity:1; transform:translate(-50%,0); } .toast.bad { background:var(--bad); }
-  dialog { border:0; border-radius:20px; padding:22px; width:min(440px,94vw); box-shadow:0 20px 60px rgba(0,0,0,.3); } dialog::backdrop { background:rgba(10,18,13,.5); }
-  dialog h3 { margin:0 0 14px; font-size:19px; } .field { margin-bottom:12px; }
+
+  /* широкий экран: меню слева, контент по центру */
+  @media (min-width: 900px) {
+    .nav { top:0; right:auto; bottom:0; width:92px; flex-direction:column; justify-content:flex-start; border-top:0; border-right:1px solid var(--line); padding:calc(78px + var(--sat)) 0 0; }
+    .nav button { flex:none; min-height:72px; } .nav button.sel::before { top:20%; bottom:20%; left:0; right:auto; width:3px; height:auto; border-radius:0 3px 3px 0; }
+    .topbar { padding-left:106px; } main { margin-left:92px; max-width:none; padding:18px 28px 40px; } main > section { max-width:860px; margin:0 auto; }
+    .toast { bottom:24px; } .topbar { z-index:40; }
+  }
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="leaf" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2c3.6 0 7.5 1.6 8.8 5.4.9 2.8.2 6.6-2.5 9.7-2.1 2.4-5 3.9-8.3 3.9-1.2 0-2.2-.2-3.1-.5C5.8 18 5 16.5 5 14.7c0-2.5 1.4-4.4 3.2-6C10 7.1 11 5 12 2Z"/></symbol></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="leaf" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2c3.6 0 7.5 1.6 8.8 5.4.9 2.8.2 6.6-2.5 9.7-2.1 2.4-5 3.9-8.3 3.9-1.2 0-2.2-.2-3.1-.5C5.8 18 5 16.5 5 14.7c0-2.5 1.4-4.4 3.2-6C10 7.1 11 5 12 2Z"/></symbol>
+  <symbol id="i-stock" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 9l9-6 9 6v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z M9 21v-8h6v8"/></symbol>
+  <symbol id="i-report" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 20V10 M10 20V4 M16 20v-7 M22 20H2"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2 M3 12a9 9 0 1 0 3-6.7 M3 4v4h4"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1 M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7 M21 19v-1a4 4 0 0 0-3-3.9 M15 4.2a3.5 3.5 0 0 1 0 6.6"/></symbol>
+  <symbol id="i-ops" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 8v8 M8 12h8 M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 1 0-2.3 6 M20 4v7h-7"/></symbol>
+</svg>
 
 <div class="center" id="login" hidden>
-  <div class="logo" style="margin:0;font-size:26px"><svg><use href="#leaf"/></svg> Склад: просмотр</div>
-  <div class="card" style="width:min(380px,100%)">
+  <div class="logo2"><svg><use href="#leaf"/></svg> Склад</div>
+  <div class="card">
     <div class="field"><label class="f" for="lg-pw">Пароль</label><input id="lg-pw" type="password" autocomplete="current-password" autofocus></div>
-    <button class="btn" style="width:100%" id="lg-go">Войти</button>
+    <button class="btn block" id="lg-go">Войти</button>
     <div class="err" id="lg-err" style="margin-top:8px"></div>
   </div>
 </div>
 
 <div class="center" id="force" hidden>
-  <div class="logo" style="margin:0;font-size:24px"><svg><use href="#leaf"/></svg> Задайте новый пароль</div>
+  <div class="logo2"><svg><use href="#leaf"/></svg> Новый пароль</div>
   <div class="muted" style="max-width:380px;text-align:center">Пароль был временным. Придумайте свой, не короче 8 символов.</div>
-  <div class="card" style="width:min(380px,100%)">
+  <div class="card">
     <div class="field"><input id="fc-old" type="password" placeholder="Временный пароль" autocomplete="current-password"></div>
     <div class="field"><input id="fc-new" type="password" placeholder="Новый пароль" autocomplete="new-password"></div>
     <div class="field"><input id="fc-new2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password"></div>
-    <button class="btn" style="width:100%" id="fc-go">Сохранить</button>
+    <button class="btn block" id="fc-go">Сохранить</button>
     <div class="err" id="fc-err" style="margin-top:8px"></div>
   </div>
 </div>
 
-<div class="wrap" id="app" hidden>
-  <div class="top">
+<div id="app" hidden>
+  <header class="topbar">
     <div class="logo"><svg><use href="#leaf"/></svg><span id="title">Склад</span></div>
-    <div class="small muted"><span class="dot" id="dot"></span><span id="seen">…</span></div>
-    <div class="chipu"><span class="av" id="av"></span><span><b id="who"></b> <span class="muted small" id="role"></span></span></div>
-    <button class="btn sec sm" id="chpw">Пароль</button>
-    <button class="btn sec sm" id="logout">Выйти</button>
-  </div>
-  <div class="banner" id="stale" hidden>Моноблок давно не передавал данные. Цифры ниже могут быть неактуальны.</div>
-  <div class="tabs" id="tabs"></div>
+    <div class="live"><span class="dot" id="dot"></span><span id="seen">…</span></div>
+    <button class="iconbtn" id="refresh" aria-label="Обновить"><svg><use href="#i-refresh"/></svg></button>
+    <button class="av" id="menu" aria-label="Меню пользователя"></button>
+  </header>
 
-  <div id="p-stock">
-    <div class="card"><h2>Всего на складе</h2><div class="big"><span id="total">0</span> <span class="muted" style="font-size:18px">кг</span></div></div>
-    <div class="grid" id="stock-cards"></div>
-    <div class="card" style="margin-top:14px"><h2>Таблица</h2>
-      <table><thead><tr><th>Сорт</th><th class="n">Приход</th><th class="n">Продано</th><th class="n">Списано</th><th class="n">Остаток</th></tr></thead><tbody id="stock-rows"></tbody></table></div>
-  </div>
+  <main>
+    <div class="banner" id="stale" hidden>Моноблок давно не передавал данные. Цифры могут быть неактуальны.</div>
 
-  <div id="p-report" hidden>
-    <div class="card"><div class="row">
-      <input type="date" id="r-from" style="width:auto"> <span>—</span> <input type="date" id="r-to" style="width:auto">
-      <button class="btn sec sm" data-range="0">Сегодня</button><button class="btn sec sm" data-range="6">7 дней</button><button class="btn sec sm" data-range="29">30 дней</button>
-      <button class="btn sm" id="r-go">Показать</button></div></div>
-    <div id="r-body"></div>
-  </div>
+    <section id="p-stock">
+      <div class="hero"><div class="lbl">Всего на складе</div><div class="num"><span id="total">0</span><small>кг</small></div></div>
+      <div class="gcards" id="stock-cards"></div>
+    </section>
 
-  <div id="p-history" hidden>
-    <div class="card"><div class="row">
-      <select id="h-type" style="width:auto"><option value="">Все операции</option><option value="in">Приход</option><option value="out">Продажа</option><option value="writeoff">Списание</option></select>
-      <input id="h-day" type="date" style="width:auto"><button class="btn sec sm" id="h-all">Все дни</button></div></div>
-    <div class="card"><table><thead><tr><th>Время</th><th>Операция</th><th>Сорт</th><th class="n">Нетто, кг</th><th>Кому / кто</th><th class="n">Сумма</th></tr></thead><tbody id="h-rows"></tbody></table></div>
-  </div>
+    <section id="p-report" hidden>
+      <div class="card filters">
+        <div class="chips">
+          <button class="chip" data-range="0">Сегодня</button><button class="chip" data-range="6">7 дней</button><button class="chip" data-range="29">30 дней</button>
+        </div>
+        <div class="daterow"><input type="date" id="r-from" aria-label="С даты"><input type="date" id="r-to" aria-label="По дату"></div>
+        <button class="btn block" id="r-go">Показать</button>
+      </div>
+      <div id="r-body"></div>
+    </section>
 
-  <div id="p-users" hidden>
-    <div class="card"><h2>Пользователи сайта</h2>
-      <table><thead><tr><th>Имя</th><th>Роль</th><th>Статус</th><th>Последний вход</th><th></th></tr></thead><tbody id="u-rows"></tbody></table></div>
-    <div class="card"><h2>Добавить пользователя</h2>
-      <div class="row"><input id="u-name" class="grow" placeholder="Имя (подпись в списке и журнале)"><input id="u-pw" class="grow" type="password" placeholder="Временный пароль, от 8 символов" autocomplete="new-password">
-        <select id="u-role" style="width:auto"><option value="viewer">Просмотр</option><option value="admin">Администратор</option></select><button class="btn" id="u-add">Добавить</button></div>
-      <div class="small muted" style="margin-top:8px">Вход только по паролю: по нему сайт узнаёт человека и его роль, поэтому у каждого пароль свой (одинаковые не принимаются). Человек войдёт с этим паролем и сразу выберет свой. «Просмотр» видит остатки, отчёты и историю; управлять пользователями может только администратор.</div>
-      <div class="err" id="u-err" style="margin-top:8px"></div></div>
-    <div class="card"><h2>Журнал входов и действий</h2>
-      <table><thead><tr><th>Время</th><th>Кто</th><th>Действие</th><th>Детали</th><th>IP</th></tr></thead><tbody id="a-rows"></tbody></table></div>
-  </div>
+    <section id="p-history" hidden>
+      <div class="card filters">
+        <div class="chips" id="h-chips">
+          <button class="chip sel" data-type="">Все</button><button class="chip" data-type="in">Приход</button><button class="chip" data-type="out">Продажа</button><button class="chip" data-type="writeoff">Списание</button>
+        </div>
+        <div class="daterow"><input id="h-day" type="date" aria-label="День"><button class="btn sec" id="h-all">Все дни</button></div>
+      </div>
+      <div class="card"><div id="h-rows"></div></div>
+    </section>
+
+    <section id="p-ops" hidden>
+      <div class="banner" id="ops-stale" hidden></div>
+      <div class="card"><div class="chips" id="op-kinds"><button class="chip sel" data-k="intake">Приход</button><button class="chip" data-k="sale">Продажа</button><button class="chip" data-k="writeoff">Списание</button></div></div>
+      <div class="card" id="scale-card"><h2>Весы</h2>
+        <div class="small muted" id="scale-state"></div>
+        <div class="acts"><button class="btn sec sm" id="sc-conn">Подключить весы</button><button class="btn sec sm" id="sc-off" hidden>Отключить</button></div>
+        <div style="margin-top:10px"><label class="f" for="tare-g">Вес пустого ящика, г (вычитается при чтении с весов)</label><input id="tare-g" type="number" inputmode="decimal" min="0" value="0"></div>
+        <div class="small muted" style="margin-top:8px">Вес, введённый на сайте или считанный через браузер, записывается как ручной: программа на складе не может проверить, что число с весов.</div>
+      </div>
+
+      <div class="card stack" id="f-intake"><h2>Приход</h2>
+        <div><label class="f" for="in-grade">Сорт</label><select id="in-grade"></select></div>
+        <div><label class="f" for="in-kg">Вес нетто, кг</label><div class="wrow"><input id="in-kg" type="number" inputmode="decimal" step="0.001" min="0"><button class="btn sec sm sc-read" data-t="in-kg">С весов</button></div></div>
+        <input id="in-worker" placeholder="Кто собрал (необязательно)">
+        <input id="in-note" placeholder="Заметка (необязательно)">
+        <button class="btn block" id="in-go">Записать приход</button>
+      </div>
+
+      <div class="card" id="f-sale" hidden><h2>Продажа</h2>
+        <div class="field"><label class="f" for="sl-cust">Покупатель</label><input id="sl-cust" placeholder="Название или имя"></div>
+        <div id="sl-items"></div>
+        <button class="btn sec block" id="sl-add" style="margin-bottom:10px">+ Позиция</button>
+        <input id="sl-note" placeholder="Заметка (необязательно)" style="margin-bottom:10px">
+        <div class="muted" style="margin-bottom:10px">Итого: <b id="sl-total">0</b></div>
+        <button class="btn block" id="sl-go">Оформить продажу</button>
+      </div>
+
+      <div class="card stack" id="f-writeoff" hidden><h2>Списание</h2>
+        <div><label class="f" for="wo-grade">Сорт</label><select id="wo-grade"></select></div>
+        <div><label class="f" for="wo-kg">Вес, кг</label><div class="wrow"><input id="wo-kg" type="number" inputmode="decimal" step="0.001" min="0"><button class="btn sec sm sc-read" data-t="wo-kg">С весов</button></div></div>
+        <input id="wo-reason" placeholder="Причина (усушка, порча, брак...)">
+        <button class="btn block" id="wo-go">Списать</button>
+      </div>
+
+      <div class="card"><h2>Мои операции</h2><div class="small muted" style="margin:-4px 0 8px">Операция сначала попадает в очередь, склад выполняет её и проверяет остаток. Статус обновляется сам.</div><div id="ops-list"></div></div>
+    </section>
+
+    <section id="p-users" hidden>
+      <div class="card"><h2>Пользователи сайта</h2><div id="u-rows"></div></div>
+      <div class="card"><h2>Добавить пользователя</h2>
+        <div class="stack">
+          <input id="u-name" placeholder="Имя (подпись в списке и журнале)">
+          <input id="u-pw" type="password" placeholder="Временный пароль, от 8 символов" autocomplete="new-password">
+          <select id="u-role"><option value="director">Директор: остатки, отчёты, история</option><option value="keeper">Складовщик: то же + приход и продажа</option><option value="admin">Администратор: всё + пользователи</option></select>
+          <button class="btn block" id="u-add">Добавить</button>
+        </div>
+        <div class="small muted" style="margin-top:10px">Вход только по паролю: по нему сайт узнаёт человека и его роль, поэтому у каждого пароль свой (одинаковые не принимаются). Человек войдёт с этим паролем и сразу выберет свой. Директор и складовщик видят остатки, отчёты и историю.</div>
+        <div class="err" id="u-err" style="margin-top:8px"></div>
+      </div>
+      <div class="card"><h2>Журнал входов и действий</h2><div id="a-rows"></div></div>
+    </section>
+  </main>
+
+  <nav class="nav" id="nav" aria-label="Разделы"></nav>
 </div>
+
+<dialog id="menu-dlg">
+  <h3 id="md-name">Пользователь</h3>
+  <div class="muted" id="md-role" style="margin:-8px 0 14px"></div>
+  <div class="stack"><button class="btn sec block" id="md-pw">Сменить пароль</button><button class="btn block" id="md-out">Выйти</button><button class="btn sec block" id="md-close">Закрыть</button></div>
+</dialog>
 
 <dialog id="pw-dlg">
   <h3 id="pd-title">Сменить пароль</h3>
   <div class="field" id="pd-old-f"><label class="f">Текущий пароль</label><input id="pd-old" type="password" autocomplete="current-password"></div>
   <div class="field"><label class="f" id="pd-new-l">Новый пароль (от 8 символов)</label><input id="pd-new" type="password" autocomplete="new-password"></div>
   <div class="err" id="pd-err"></div>
-  <div class="row" style="justify-content:flex-end"><button class="btn sec" id="pd-cancel">Отмена</button><button class="btn" id="pd-ok">Сохранить</button></div>
+  <div class="acts" style="justify-content:flex-end"><button class="btn sec" id="pd-cancel">Отмена</button><button class="btn" id="pd-ok">Сохранить</button></div>
+</dialog>
+<dialog id="ed-dlg">
+  <h3 id="ed-title">Исправить запись</h3>
+  <div class="stack">
+    <div><label class="f" for="ed-grade">Сорт</label><select id="ed-grade"></select></div>
+    <div><label class="f" for="ed-kg">Вес нетто, кг</label><input id="ed-kg" type="number" inputmode="decimal" step="0.001" min="0"></div>
+    <div id="ed-in"><label class="f" for="ed-worker">Кто собрал</label><input id="ed-worker"></div>
+    <div><label class="f" for="ed-note">Заметка</label><input id="ed-note"></div>
+    <div id="ed-out" class="stack"><div><label class="f" for="ed-cust">Покупатель</label><input id="ed-cust"></div>
+      <div class="daterow"><div><label class="f" for="ed-price">Цена за кг</label><input id="ed-price" type="number" inputmode="decimal" min="0"></div><div><label class="f" for="ed-amount">Сумма</label><input id="ed-amount" type="number" inputmode="decimal" min="0"></div></div></div>
+    <div><label class="f" for="ed-reason">Причина исправления (обязательно)</label><input id="ed-reason"></div>
+  </div>
+  <div class="err" id="ed-err" style="margin-top:8px"></div>
+  <div class="acts" style="justify-content:flex-end"><button class="btn sec" id="ed-cancel">Отмена</button><button class="btn" id="ed-ok">Отправить</button></div>
 </dialog>
 <div class="toast" id="toast"></div>
 
@@ -143,8 +271,12 @@ const kg = v => (v == null ? '—' : Number(v).toFixed(3));
 const money = v => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 const iso = d => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const shift = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
-let cur = 'сум', tab = 'stock', timer = null, me = null, toastT = null;
-let lastPw = ''; // пароль, только что введённый при входе: нужен один раз, если его сразу просят сменить (в памяти, не сохраняется)
+const dm = s => s.slice(8, 10) + '.' + s.slice(5, 7);
+const GRADE_COLORS = ['#c79a1c', '#2c7a4e', '#2a6aa8', '#8a5fb0', '#b1362d', '#2f8f89', '#a86a2a', '#5a6b80'];
+let GRADES = [], histMap = {}, opsTimer = null, lastSeenSec = 0;
+const ROLE_NAME = { admin: 'Администратор', director: 'Директор', keeper: 'Складовщик' };
+const NAV = [['stock', 'Остатки', 'i-stock'], ['report', 'Отчёт', 'i-report'], ['history', 'История', 'i-history'], ['ops', 'Операции', 'i-ops', ['keeper', 'admin']], ['users', 'Люди', 'i-users', ['admin']]];
+let cur = 'сум', tab = 'stock', timer = null, me = null, toastT = null, lastPw = '', gradeIdx = {}, hType = '';
 
 function toast(t, bad) { const e = $('toast'); e.textContent = t; e.className = 'toast show' + (bad ? ' bad' : ''); clearTimeout(toastT); toastT = setTimeout(() => e.className = 'toast', 3200); }
 async function call(method, path, body) {
@@ -160,6 +292,8 @@ async function api(method, path, body) {
   return r;
 }
 const msg = r => (r.data && r.data.error) || 'Ошибка';
+const color = g => { if (!(g in gradeIdx)) gradeIdx[g] = Object.keys(gradeIdx).length; return GRADE_COLORS[gradeIdx[g] % GRADE_COLORS.length]; };
+const row = (l, s, r, extra = '') => `<li class="li ${extra}"><div class="l"><div class="t">${l}</div>${s ? `<div class="s">${s}</div>` : ''}</div><div class="r">${r}</div></li>`;
 
 function show(which) { ['login', 'force', 'app'].forEach(k => $(k).hidden = k !== which); }
 function showLogin() { clearInterval(timer); me = null; lastPw = ''; show('login'); $('lg-pw').value = ''; $('lg-pw').focus(); }
@@ -168,7 +302,7 @@ function showForce() {
   $('fc-old').parentElement.hidden = !!lastPw; // только что ввели этот пароль: второй раз не спрашиваем
 }
 
-/* ───── вход ───── */
+/* ───── вход, выход, пароль ───── */
 $('lg-go').onclick = login; $('lg-pw').onkeydown = e => { if (e.key === 'Enter') login(); };
 async function login() {
   const pw = $('lg-pw').value;
@@ -176,23 +310,24 @@ async function login() {
   if (!r.ok) { $('lg-err').textContent = msg(r); return; }
   lastPw = pw; $('lg-err').textContent = ''; await start();
 }
-$('logout').onclick = async () => { await call('POST', '/api/logout'); showLogin(); };
+async function logout() { await call('POST', '/api/logout'); showLogin(); }
 $('fc-go').onclick = async () => {
   if ($('fc-new').value !== $('fc-new2').value) { $('fc-err').textContent = 'Пароли не совпадают'; return; }
   const r = await call('POST', '/api/password', { old_password: lastPw || $('fc-old').value, new_password: $('fc-new').value });
   if (!r.ok) { $('fc-err').textContent = msg(r); return; }
   lastPw = ''; await start();
 };
-
-/* ───── смена пароля: свой или (админ) новый временный для другого ───── */
+$('menu').onclick = () => { $('md-name').textContent = me.name; $('md-role').textContent = ROLE_NAME[me.role] || me.role; $('menu-dlg').showModal(); };
+$('md-close').onclick = () => $('menu-dlg').close();
+$('md-out').onclick = () => { $('menu-dlg').close(); logout(); };
+$('md-pw').onclick = () => { $('menu-dlg').close(); openPw(null); };
 let pwTarget = null;
 function openPw(target) {
   pwTarget = target; $('pd-err').textContent = ''; $('pd-old').value = ''; $('pd-new').value = '';
-  $('pd-title').textContent = target ? `Новый временный пароль для «${target.name}»` : 'Сменить пароль';
+  $('pd-title').textContent = target ? `Новый пароль для «${target.name}»` : 'Сменить пароль';
   $('pd-old-f').hidden = !!target; $('pd-new-l').textContent = target ? 'Временный пароль (от 8 символов)' : 'Новый пароль (от 8 символов)';
   $('pw-dlg').showModal();
 }
-$('chpw').onclick = () => openPw(null);
 $('pd-cancel').onclick = () => $('pw-dlg').close();
 $('pd-ok').onclick = async () => {
   const r = pwTarget ? await api('PATCH', '/api/users', { id: pwTarget.id, password: $('pd-new').value })
@@ -201,7 +336,7 @@ $('pd-ok').onclick = async () => {
   $('pw-dlg').close(); toast(pwTarget ? 'Пароль задан, человек сменит его при входе' : 'Пароль изменён'); if (pwTarget) { loadUsers(); loadLog(); }
 };
 
-/* ───── старт и шапка ───── */
+/* ───── старт, шапка, меню ───── */
 async function start() {
   const r = await call('GET', '/api/status');
   if (r.status === 401) return showLogin();
@@ -209,61 +344,96 @@ async function start() {
   me = r.data.user;
   if (me.must_change) return showForce();
   show('app');
-  $('who').textContent = me.name; $('av').textContent = me.name.trim().charAt(0).toUpperCase(); $('role').textContent = me.role === 'admin' ? 'администратор' : 'просмотр';
-  buildTabs(); paintStatus(r.data); go(tab === 'users' && me.role !== 'admin' ? 'stock' : tab);
-  clearInterval(timer); timer = setInterval(async () => { const s = await api('GET', '/api/status'); if (s.ok) paintStatus(s.data); if (tab === 'stock') loadStock(); }, 30000);
+  $('menu').textContent =me.name.trim().charAt(0).toUpperCase();
+  buildNav(); paintStatus(r.data); go(NAV.some(n => n[0] === tab && (!n[3] || n[3].includes(me.role))) ? tab : 'stock');
+  clearInterval(timer); timer = setInterval(refreshAll, 30000);
 }
+async function refreshAll() { const s = await api('GET', '/api/status'); if (s.ok) paintStatus(s.data); if (tab === 'stock') loadStock(); }
+$('refresh').onclick = async () => { await refreshAll(); if (tab === 'report') loadReport(); if (tab === 'history') loadHistory(); toast('Обновлено'); };
 function paintStatus(d) {
   const dev = d.devices[0];
-  if (!dev) { $('seen').textContent = 'данных от моноблока ещё не было'; $('dot').className = 'dot bad'; $('stale').hidden = true; return; }
+  if (!dev) { $('seen').textContent = 'нет данных'; $('dot').className = 'dot bad'; $('stale').hidden = true; return; }
+  GRADES = Array.isArray(dev.grades) ? dev.grades : []; lastSeenSec = dev.seconds_ago;
   cur = dev.currency || 'сум'; $('title').textContent = 'Склад' + (dev.crop ? ' · ' + dev.crop : '');
   const m = Math.floor(dev.seconds_ago / 60);
-  $('seen').textContent = 'обновлено ' + (m < 1 ? 'только что' : m < 60 ? m + ' мин назад' : Math.floor(m / 60) + ' ч назад') + (dev.pending ? ` · в очереди ${dev.pending}` : '');
+  $('seen').textContent = m < 1 ? 'сейчас' : m < 60 ? m + ' мин' : Math.floor(m / 60) + ' ч';
   const stale = dev.seconds_ago > 900; $('dot').className = 'dot ' + (stale ? 'bad' : 'ok'); $('stale').hidden = !stale;
 }
-function buildTabs() {
-  const tabs = [['stock', 'Остатки'], ['report', 'Отчёт'], ['history', 'История']]; if (me.role === 'admin') tabs.push(['users', 'Пользователи']);
-  $('tabs').innerHTML = tabs.map(([id, n]) => `<button class="tab" data-tab="${id}">${n}</button>`).join('');
-  document.querySelectorAll('.tab').forEach(b => b.onclick = () => go(b.dataset.tab));
+function buildNav() {
+  $('nav').innerHTML = NAV.filter(n => !n[3] || n[3].includes(me.role)).map(([id, name, ic]) => `<button data-tab="${id}"><svg><use href="#${ic}"/></svg><span>${name}</span></button>`).join('');
+  document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.tab));
 }
 function go(id) {
-  tab = id; document.querySelectorAll('.tab').forEach(b => b.classList.toggle('sel', b.dataset.tab === id));
-  ['stock', 'report', 'history', 'users'].forEach(p => $('p-' + p).hidden = p !== id);
+  tab = id; document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('sel', b.dataset.tab === id));
+  ['stock', 'report', 'history', 'ops', 'users'].forEach(p => $('p-' + p).hidden = p !== id);
+  clearInterval(opsTimer);
+  window.scrollTo(0, 0);
   if (id === 'stock') loadStock();
   if (id === 'report') { if (!$('r-from').value) { $('r-from').value = iso(new Date()); $('r-to').value = iso(new Date()); } loadReport(); }
   if (id === 'history') loadHistory();
+  if (id === 'ops') { fillGrades(); loadOps(); scaleAuto(); opsTimer = setInterval(loadOps, 8000); }
   if (id === 'users') { loadUsers(); loadLog(); }
 }
 
-/* ───── данные склада ───── */
+/* ───── остатки ───── */
 async function loadStock() {
   const r = await api('GET', '/api/stock'); if (!r.ok) return; const d = r.data;
   $('total').textContent = kg(d.total_kg);
-  $('stock-cards').innerHTML = d.rows.map(x => `<div class="gcard"><div class="muted">${esc(x.grade)}</div><div class="big">${kg(x.balance_kg)}</div><div class="small muted">кг на складе</div></div>`).join('');
-  $('stock-rows').innerHTML = d.rows.map(x => `<tr><td>${esc(x.grade)}</td><td class="n">${kg(x.in_kg)}</td><td class="n">${kg(x.out_kg)}</td><td class="n">${kg(x.writeoff_kg)}</td><td class="n"><b>${kg(x.balance_kg)}</b></td></tr>`).join('');
+  $('stock-cards').innerHTML = d.rows.map(x => `<div class="gcard" style="--gc:${color(x.grade)}"><div class="nm">${esc(x.grade)}</div><div class="bal">${kg(x.balance_kg)} <small>кг</small></div>
+    <div class="mini"><div>приход<b>${kg(x.in_kg)}</b></div><div>продано<b>${kg(x.out_kg)}</b></div><div>списано<b>${kg(x.writeoff_kg)}</b></div></div></div>`).join('') || '<div class="empty">Данных ещё нет</div>';
 }
+
+/* ───── отчёт ───── */
 document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => { $('r-from').value = shift(+b.dataset.range); $('r-to').value = iso(new Date()); loadReport(); });
 $('r-go').onclick = loadReport;
 async function loadReport() {
   const r = await api('GET', `/api/report?from=${$('r-from').value}&to=${$('r-to').value}`); if (!r.ok) return; const d = r.data;
   const sum = k => d.by_grade.reduce((a, x) => a + x[k], 0), tOut = sum('out_kg'), tAmt = sum('amount');
-  const tbl = (head, rows) => `<table><thead><tr>${head.map((h, i) => `<th class="${i ? 'n' : ''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${head.length}" class="muted">Нет данных</td></tr>`}</tbody></table>`;
+  const section = (title, rows) => `<div class="card"><h2>${title}</h2>${rows.length ? `<ul class="list">${rows.join('')}</ul>` : '<div class="muted">Нет данных за период</div>'}</div>`;
   $('r-body').innerHTML = `
-   <div class="card"><div class="kpi"><div>Приход<b>${kg(sum('in_kg'))} кг</b></div><div>Продано<b>${kg(tOut)} кг</b></div><div>Выручка<b>${money(tAmt)} ${esc(cur)}</b></div><div>Средняя цена<b>${tOut ? money(tAmt / tOut) : '—'} ${esc(cur)}/кг</b></div><div>Списано<b>${kg(sum('writeoff_kg'))} кг</b></div></div>
-     <div class="muted small" style="margin-top:10px">Ручных записей веса: ${d.manual_entries} · отменённых операций: ${d.cancelled_entries}</div></div>
-   <div class="card"><h2>По сортам</h2>${tbl(['Сорт', 'Приход, кг', 'Продано, кг', 'Списано, кг', `Выручка, ${cur}`], d.by_grade.map(x => `<tr><td>${esc(x.grade)}</td><td class="n">${kg(x.in_kg)}</td><td class="n">${kg(x.out_kg)}</td><td class="n">${kg(x.writeoff_kg)}</td><td class="n">${money(x.amount)}</td></tr>`))}</div>
-   <div class="card"><h2>По дням</h2>${tbl(['День', 'Приход, кг', 'Продано, кг', `Выручка, ${cur}`], d.by_day.map(x => `<tr><td>${esc(x.day)}</td><td class="n">${kg(x.in_kg)}</td><td class="n">${kg(x.out_kg)}</td><td class="n">${money(x.amount)}</td></tr>`))}</div>
-   <div class="card"><h2>Кто сколько собрал</h2>${tbl(['Работник', 'Ящиков', 'Нетто, кг'], d.by_worker.map(x => `<tr><td>${esc(x.worker)}</td><td class="n">${x.crates}</td><td class="n">${kg(x.kg)}</td></tr>`))}</div>
-   <div class="card"><h2>Покупатели</h2>${tbl(['Покупатель', 'Куплено, кг', `Сумма, ${cur}`], d.by_customer.map(x => `<tr><td>${esc(x.customer)}</td><td class="n">${kg(x.kg)}</td><td class="n">${money(x.amount)}</td></tr>`))}</div>`;
+    <div class="kpis">
+      <div class="kpi"><div class="k">Выручка</div><div class="v">${money(tAmt)} <small>${esc(cur)}</small></div></div>
+      <div class="kpi"><div class="k">Продано</div><div class="v">${kg(tOut)} <small>кг</small></div></div>
+      <div class="kpi"><div class="k">Приход</div><div class="v">${kg(sum('in_kg'))} <small>кг</small></div></div>
+      <div class="kpi"><div class="k">Средняя цена</div><div class="v">${tOut ? money(tAmt / tOut) : '—'} <small>${esc(cur)}/кг</small></div></div>
+      <div class="kpi"><div class="k">Списано</div><div class="v">${kg(sum('writeoff_kg'))} <small>кг</small></div></div>
+    </div>
+    <div class="muted small" style="margin:-2px 2px 12px">Ручных записей веса: ${d.manual_entries} · отменённых операций: ${d.cancelled_entries}</div>
+    ${section('По сортам', d.by_grade.map(x => row(`<span class="sw" style="--gc:${color(x.grade)}"></span>${esc(x.grade)}`, `приход ${kg(x.in_kg)} · продано ${kg(x.out_kg)} · списано ${kg(x.writeoff_kg)}`, `${money(x.amount)}`)))}
+    ${section('По дням', d.by_day.map(x => row(dm(x.day), `приход ${kg(x.in_kg)} · продано ${kg(x.out_kg)} кг`, `${money(x.amount)}`)))}
+    ${section('Кто сколько собрал', d.by_worker.map(x => row(esc(x.worker), `${x.crates} ящ.`, `${kg(x.kg)} кг`)))}
+    ${section('Покупатели', d.by_customer.map(x => row(esc(x.customer), `${kg(x.kg)} кг`, `${money(x.amount)} ${esc(cur)}`)))}`;
 }
-const TYPE = { in: ['Приход', 'b-in'], out: ['Продажа', 'b-out'], writeoff: ['Списание', 'b-writeoff'] };
-$('h-type').onchange = loadHistory; $('h-day').onchange = loadHistory; $('h-all').onclick = () => { $('h-day').value = ''; loadHistory(); };
+
+/* ───── история ───── */
+const TYPE = { in: ['Приход', 'b-in', '#2c7a4e'], out: ['Продажа', 'b-out', '#2a6aa8'], writeoff: ['Списание', 'b-writeoff', '#a8650c'] };
+$('h-chips').onclick = e => { const b = e.target.closest('[data-type]'); if (!b) return; hType = b.dataset.type; document.querySelectorAll('#h-chips .chip').forEach(c => c.classList.toggle('sel', c === b)); loadHistory(); };
+$('h-day').onchange = loadHistory; $('h-all').onclick = () => { $('h-day').value = ''; loadHistory(); };
+function actions(m) {
+  if (m.status === 'cancelled' || !me) return '';
+  histMap[m.id] = m;
+  const mine = me.role === 'keeper' && m.user_name === me.name && m.ts.slice(0, 10) === iso(new Date());
+  if (me.role !== 'admin' && !mine) return '';
+  return `<div class="acts"><button class="btn sec sm" data-a="cancel" data-id="${m.id}">Отменить${m.sale_id ? ' продажу' : ''}</button>${me.role === 'admin' ? `<button class="btn sec sm" data-a="edit" data-id="${m.id}">Исправить</button>` : ''}</div>`;
+}
+$('h-rows').onclick = async e => {
+  const b = e.target.closest('[data-a]'); if (!b) return; const m = histMap[b.dataset.id]; if (!m) return;
+  if (b.dataset.a === 'cancel') {
+    const reason = prompt(m.sale_id ? 'Причина отмены всей продажи:' : 'Причина отмены:'); if (!reason || !reason.trim()) return;
+    await sendCmd(m.sale_id ? 'cancel_sale' : 'cancel_movement', { id: m.sale_id || m.id, reason });
+  } else openEdit(m);
+};
 async function loadHistory() {
-  const r = await api('GET', `/api/movements?type=${$('h-type').value}&day=${$('h-day').value}&limit=200`); if (!r.ok) return;
+  const r = await api('GET', `/api/movements?type=${hType}&day=${$('h-day').value}&limit=200`); if (!r.ok) return;
   $('h-rows').innerHTML = r.data.map(m => {
-    const [tn, tc] = TYPE[m.type], who = m.type === 'out' ? (m.customer || '') : m.type === 'in' ? (m.worker || '') : (m.note || '');
-    return `<tr class="${m.status === 'cancelled' ? 'cancelled' : ''}"><td>${esc(m.ts.slice(5, 16))}</td><td><span class="badge ${tc}">${tn}</span></td><td>${esc(m.grade)}</td><td class="n">${kg(m.net_kg)}${m.manual ? ' *' : ''}</td><td>${esc(who)}${m.status === 'cancelled' ? ` <span class="small">(отмена: ${esc(m.cancel_reason || '')})</span>` : ''}</td><td class="n">${m.type === 'out' ? money(m.amount) : ''}</td></tr>`;
-  }).join('') || '<tr><td colspan="6" class="muted">Записей нет</td></tr>';
+    const [tn, tc, col] = TYPE[m.type], who = m.type === 'out' ? (m.customer || '') : m.type === 'in' ? (m.worker || '') : (m.note || '');
+    const cancelled = m.status === 'cancelled';
+    return `<div class="hi ${cancelled ? 'cancelled' : ''}" style="--tc:${col}"><div class="bar"></div><div class="l" style="flex:1;min-width:0">
+      <div class="t" style="font-weight:600">${esc(m.grade)} · ${kg(m.net_kg)} кг${m.manual ? ' *' : ''}</div>
+      <div class="s small muted"><span class="badge ${tc}">${tn}</span> ${dm(m.ts.slice(0, 10))} ${esc(m.ts.slice(11, 16))}${who ? ' · ' + esc(who) : ''}</div>
+      ${cancelled ? `<div class="small muted">отмена: ${esc(m.cancel_reason || '')}</div>` : ''}${actions(m)}</div>
+      <div class="r" style="font-weight:600;white-space:nowrap">${m.type === 'out' ? money(m.amount) : ''}</div></div>`;
+  }).join('') || '<div class="empty">Записей нет</div>';
 }
 
 /* ───── пользователи (только админ; все проверки повторяет сервер) ───── */
@@ -271,19 +441,19 @@ async function loadUsers() {
   const r = await api('GET', '/api/users'); if (!r.ok) return;
   $('u-rows').innerHTML = '';
   r.data.forEach(u => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td><b>${esc(u.name)}</b>${u.must_change ? ' <span class="small muted">(ещё не сменил пароль)</span>' : ''}</td>
-      <td><span class="badge b-${u.role}">${u.role === 'admin' ? 'админ' : 'просмотр'}</span></td><td>${u.active ? 'работает' : '<span class="badge b-off">отключён</span>'}</td><td class="small">${esc(u.last_login || '—')}</td>
-      <td style="white-space:nowrap"><button class="btn sec sm" data-a="name">Имя</button> <button class="btn sec sm" data-a="role">${u.role === 'admin' ? 'В просмотр' : 'В админы'}</button> <button class="btn sec sm" data-a="pw">Новый пароль</button> <button class="btn sec sm" data-a="active">${u.active ? 'Отключить' : 'Включить'}</button></td>`;
-    tr.querySelectorAll('button').forEach(b => b.onclick = async () => {
+    const el = document.createElement('div'); el.className = 'li'; el.style.cssText = 'display:block';
+    el.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(u.name)}</b><span class="badge b-${u.role}">${ROLE_NAME[u.role] || u.role}</span>${u.active ? '' : '<span class="badge b-off">отключён</span>'}</div>
+      <div class="s small muted">${u.must_change ? 'ещё не сменил пароль · ' : ''}вход: ${esc(u.last_login || '—')}</div>
+      <div class="acts"><button class="btn sec sm" data-a="name">Имя</button><select class="rolesel" aria-label="Роль" style="width:auto;min-height:40px;padding:6px 10px;font-size:14px">${Object.entries(ROLE_NAME).map(([k, v]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${v}</option>`).join('')}</select><button class="btn sec sm" data-a="pw">Новый пароль</button><button class="btn sec sm" data-a="active">${u.active ? 'Отключить' : 'Включить'}</button></div>`;
+    el.querySelector('.rolesel').onchange = async e => { const r2 = await api('PATCH', '/api/users', { id: u.id, role: e.target.value }); toast(r2.ok ? 'Роль изменена' : msg(r2), !r2.ok); loadUsers(); loadLog(); };
+    el.querySelectorAll('button').forEach(b => b.onclick = async () => {
       if (b.dataset.a === 'pw') return openPw(u);
       const patch = { id: u.id };
       if (b.dataset.a === 'name') { const n = prompt('Новое имя:', u.name); if (!n) return; patch.name = n; }
-      if (b.dataset.a === 'role') patch.role = u.role === 'admin' ? 'viewer' : 'admin';
       if (b.dataset.a === 'active') patch.active = !u.active;
       const r2 = await api('PATCH', '/api/users', patch); toast(r2.ok ? 'Сохранено' : msg(r2), !r2.ok); loadUsers(); loadLog();
     });
-    $('u-rows').appendChild(tr);
+    $('u-rows').appendChild(el);
   });
 }
 $('u-add').onclick = async () => {
@@ -293,8 +463,137 @@ $('u-add').onclick = async () => {
 };
 async function loadLog() {
   const r = await api('GET', '/api/users?log=1'); if (!r.ok) return;
-  $('a-rows').innerHTML = r.data.map(a => `<tr><td class="small">${esc(a.ts.slice(5, 16))}</td><td>${esc(a.user_name || '—')}</td><td>${esc(a.action)}</td><td class="small">${esc(a.detail)}</td><td class="small muted">${esc(a.ip || '')}</td></tr>`).join('');
+  $('a-rows').innerHTML = `<ul class="list">${r.data.map(a => row(`${esc(a.user_name || '—')} · ${esc(a.action)}`, `${esc(a.detail)}${a.ip ? ' · ' + esc(a.ip) : ''}`, `<span class="small muted">${esc(a.ts.slice(5, 16))}</span>`)).join('')}</ul>`;
 }
+
+/* ───── операции с сайта: уходят в очередь, склад выполняет и отвечает ───── */
+const KIND = { intake: 'Приход', sale: 'Продажа', writeoff: 'Списание', cancel_movement: 'Отмена записи', cancel_sale: 'Отмена продажи', edit: 'Исправление' };
+const ST = { pending: ['ждёт склад', 'b-pending'], applied: ['выполнено', 'b-applied'], rejected: ['отклонено', 'b-rejected'], expired: ['просрочено', 'b-expired'] };
+function fillGrades() {
+  for (const id of ['in-grade', 'wo-grade', 'ed-grade']) { const el = $(id), v = el.value; el.innerHTML = GRADES.map(g => `<option>${esc(g)}</option>`).join(''); if (GRADES.includes(v)) el.value = v; }
+  document.querySelectorAll('#sl-items select').forEach(el => { const v = el.value; el.innerHTML = GRADES.map(g => `<option>${esc(g)}</option>`).join(''); if (GRADES.includes(v)) el.value = v; });
+  const stale = lastSeenSec > 900;
+  $('ops-stale').hidden = !stale;
+  if (stale) $('ops-stale').textContent = 'Склад не на связи. Операция будет выполнена, когда программа на складе выйдет на связь (в течение суток), иначе она просрочится.';
+}
+$('op-kinds').onclick = e => {
+  const b = e.target.closest('[data-k]'); if (!b) return;
+  document.querySelectorAll('#op-kinds .chip').forEach(c => c.classList.toggle('sel', c === b));
+  $('f-intake').hidden = b.dataset.k !== 'intake'; $('f-sale').hidden = b.dataset.k !== 'sale'; $('f-writeoff').hidden = b.dataset.k !== 'writeoff';
+  if (b.dataset.k === 'sale' && !$('sl-items').children.length) addSaleRow();
+};
+const rid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+async function sendCmd(kind, payload, requestId) {
+  const r = await api('POST', '/api/command', { kind, payload, request_id: requestId || rid() });
+  if (!r.ok) { toast(msg(r), true); return false; }
+  toast(r.data.duplicate ? 'Эта операция уже принята' : 'Принято. Склад выполнит и подтвердит'); if (tab === 'ops') loadOps(); else loadHistory();
+  return true;
+}
+function guard(btn, fn) {
+  let reqId = rid(); // один и тот же номер на повторные нажатия: сервер не создаст вторую операцию
+  btn.onclick = async () => {
+    if (btn.disabled) return; btn.disabled = true;
+    try { if (await fn(reqId)) reqId = rid(); } finally { btn.disabled = false; }
+  };
+}
+guard($('in-go'), async id => {
+  const ok = await sendCmd('intake', { grade: $('in-grade').value, net_kg: $('in-kg').value, worker: $('in-worker').value, note: $('in-note').value }, id);
+  if (ok) { $('in-kg').value = ''; $('in-note').value = ''; } return ok;
+});
+guard($('wo-go'), async id => {
+  const ok = await sendCmd('writeoff', { grade: $('wo-grade').value, net_kg: $('wo-kg').value, reason: $('wo-reason').value }, id);
+  if (ok) { $('wo-kg').value = ''; $('wo-reason').value = ''; } return ok;
+});
+function addSaleRow() {
+  const el = document.createElement('div'); el.className = 'sitem'; const n = 'sl' + Math.random().toString(36).slice(2, 7);
+  el.innerHTML = `<div class="wrow"><select>${GRADES.map(g => `<option>${esc(g)}</option>`).join('')}</select><button class="btn sec sm" data-del style="min-width:44px" aria-label="Убрать позицию">×</button></div>
+    <div class="wrow" style="margin-top:8px"><input id="${n}" class="kg" type="number" inputmode="decimal" step="0.001" min="0" placeholder="Вес, кг"><button class="btn sec sm sc-read" data-t="${n}">С весов</button></div>
+    <div class="two"><input class="price" type="number" inputmode="decimal" min="0" placeholder="Цена за кг"><input class="amt" type="number" inputmode="decimal" min="0" placeholder="Сумма"></div>`;
+  const kgI = el.querySelector('.kg'), pr = el.querySelector('.price'), am = el.querySelector('.amt');
+  const calc = () => { if (!am.dataset.hand && kgI.value && pr.value) am.value = Math.round(kgI.value * pr.value * 100) / 100; total(); };
+  kgI.oninput = pr.oninput = calc; am.oninput = () => { am.dataset.hand = am.value ? '1' : ''; total(); };
+  el.querySelector('[data-del]').onclick = () => { el.remove(); total(); };
+  $('sl-items').appendChild(el);
+}
+const total = () => { $('sl-total').textContent = money([...document.querySelectorAll('#sl-items .amt')].reduce((a, i) => a + (+i.value || 0), 0)) + ' ' + cur; };
+$('sl-add').onclick = addSaleRow;
+guard($('sl-go'), async id => {
+  const items = [...document.querySelectorAll('#sl-items .sitem')].map(el => ({ grade: el.querySelector('select').value, net_kg: el.querySelector('.kg').value, price_per_kg: el.querySelector('.price').value, amount: el.querySelector('.amt').value }));
+  const ok = await sendCmd('sale', { customer: $('sl-cust').value, note: $('sl-note').value, items }, id);
+  if (ok) { $('sl-items').innerHTML = ''; $('sl-cust').value = ''; $('sl-note').value = ''; addSaleRow(); total(); } return ok;
+});
+async function loadOps() {
+  const r = await api('GET', '/api/command'); if (!r.ok) return;
+  fillGrades();
+  const desc = c => { const p = c.payload || {}; return c.kind === 'intake' ? `${p.grade} ${p.net_kg} кг` : c.kind === 'writeoff' ? `${p.grade} ${p.net_kg} кг, ${p.reason}` : c.kind === 'sale' ? `${p.customer}: ${(p.items || []).map(i => i.grade + ' ' + i.net_kg).join(', ')}` : c.kind === 'edit' ? `запись #${p.id}: ${p.reason}` : `#${p.id}: ${p.reason}`; };
+  $('ops-list').innerHTML = r.data.length ? `<ul class="list">${r.data.map(c => { const [t, cl] = ST[c.status] || [c.status, '']; return row(`${esc(KIND[c.kind] || c.kind)} <span class="badge ${cl}">${t}</span>`, `${esc(desc(c))}${c.result ? '<br>' + esc(c.result) : ''}`, `<span class="small muted">${esc(c.ts.slice(5))}</span>`); }).join('')}</ul>` : '<div class="muted">Пока ничего</div>';
+}
+
+/* ───── исправление записи (админ) ───── */
+let edTarget = null;
+function openEdit(m) {
+  edTarget = m; fillGrades(); $('ed-err').textContent = ''; $('ed-title').textContent = `Исправить запись #${m.id}`;
+  $('ed-grade').value = m.grade; $('ed-kg').value = m.net_kg; $('ed-worker').value = m.worker || ''; $('ed-note').value = m.note || '';
+  $('ed-in').hidden = m.type !== 'in'; $('ed-out').hidden = m.type !== 'out';
+  $('ed-cust').value = m.customer || ''; $('ed-price').value = m.price_per_kg ?? ''; $('ed-amount').value = m.amount ?? ''; $('ed-reason').value = '';
+  $('ed-dlg').showModal();
+}
+$('ed-cancel').onclick = () => $('ed-dlg').close();
+$('ed-ok').onclick = async () => {
+  const m = edTarget, p = { id: m.id, reason: $('ed-reason').value };
+  if (!p.reason.trim()) { $('ed-err').textContent = 'Укажите причину'; return; }
+  const put = (k, v, old) => { if (String(v) !== String(old ?? '')) p[k] = v; };
+  put('grade', $('ed-grade').value, m.grade); put('net_kg', $('ed-kg').value, m.net_kg); put('note', $('ed-note').value, m.note || '');
+  if (m.type === 'in') put('worker', $('ed-worker').value, m.worker || '');
+  if (m.type === 'out') { put('customer', $('ed-cust').value, m.customer || ''); put('price_per_kg', $('ed-price').value, m.price_per_kg); put('amount', $('ed-amount').value, m.amount); }
+  if (Object.keys(p).length <= 2) { $('ed-err').textContent = 'Ничего не изменено'; return; }
+  if (await sendCmd('edit', p)) $('ed-dlg').close();
+};
+
+/* ───── весы через браузер (Web Serial: Chrome/Edge на компьютере и Android) ───── */
+const SC = { port: null, reader: null, writer: null, buf: [] };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const scaleMsg = t => { $('scale-state').textContent = t; };
+function scaleUi() {
+  const has = 'serial' in navigator;
+  $('sc-conn').hidden = !has || !!SC.port; $('sc-off').hidden = !SC.port;
+  scaleMsg(!has ? 'Чтение весов через браузер работает в Chrome или Edge на компьютере и Android. Введите вес вручную.' : SC.port ? 'Весы подключены. Нажмите «С весов» рядом с полем веса.' : 'Весы не подключены. Подключите кабель и нажмите «Подключить весы», выберите порт.');
+  document.querySelectorAll('.sc-read').forEach(b => b.hidden = !has);
+}
+async function scaleOpen(port) {
+  await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+  try { await port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch (e) {} // с включёнными линиями весы не отвечают
+  await sleep(300);
+  SC.port = port; SC.buf = []; SC.reader = port.readable.getReader(); SC.writer = port.writable.getWriter();
+  (async () => { try { for (;;) { const { value, done } = await SC.reader.read(); if (done) break; SC.buf.push(...value); } } catch (e) {} SC.port = null; scaleUi(); })();
+  scaleUi();
+}
+async function scaleAuto() { scaleUi(); if (!('serial' in navigator) || SC.port) return; try { const [p] = await navigator.serial.getPorts(); if (p) await scaleOpen(p); } catch (e) {} }
+$('sc-conn').onclick = async () => { try { await scaleOpen(await navigator.serial.requestPort()); } catch (e) { if (e.name !== 'NotFoundError') toast('Не удалось открыть порт: ' + e.message, true); } };
+$('sc-off').onclick = async () => { try { SC.reader.cancel(); SC.writer.releaseLock(); await SC.port.close(); } catch (e) {} SC.port = null; scaleUi(); };
+const waitBuf = (pred, ms) => new Promise(res => { const t0 = Date.now(); (function tick() { const v = pred(); if (v !== null) return res(v); if (Date.now() - t0 > ms) return res(null); setTimeout(tick, 20); })(); });
+async function scaleRead() { // CAS AD: ENQ(05) -> ACK(06) -> DC1(11) -> кадр 01 02 S|U знак вес kg 03 04
+  SC.buf.length = 0; await SC.writer.write(Uint8Array.of(5));
+  const ack = await waitBuf(() => SC.buf.length ? SC.buf[0] : null, 1500);
+  if (ack !== 6) throw new Error('Весы не ответили. Проверьте кабель и включите весы');
+  SC.buf.length = 0; await SC.writer.write(Uint8Array.of(0x11));
+  const frame = await waitBuf(() => { const i = SC.buf.indexOf(4); return i >= 0 ? SC.buf.slice(0, i + 1) : null; }, 3000);
+  if (!frame) throw new Error('Весы не прислали вес');
+  const m = /\x01\x02([SU])\s*([-+]?)\s*(\d+(?:\.\d+)?)/.exec(String.fromCharCode(...frame));
+  if (!m) throw new Error('Не удалось разобрать ответ весов');
+  if (m[1] !== 'S') throw new Error('Вес не устоялся, подождите и нажмите ещё раз');
+  return (m[2] === '-' ? -1 : 1) * parseFloat(m[3]);
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('.sc-read'); if (!b) return; b.disabled = true;
+  try {
+    if (!SC.port) { await scaleOpen(await navigator.serial.requestPort()); }
+    const gross = await scaleRead(), net = Math.round((gross - (+$('tare-g').value || 0) / 1000) * 1000) / 1000;
+    if (net <= 0) throw new Error('Вес не больше веса ящика');
+    const t = $(b.dataset.t); t.value = net.toFixed(3); t.dispatchEvent(new Event('input'));
+  } catch (err) { if (err.name !== 'NotFoundError') toast(err.message, true); } finally { b.disabled = false; }
+});
+scaleUi();
 start();
 </script>
 </body>

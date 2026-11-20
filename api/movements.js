@@ -16,7 +16,7 @@ module.exports = handler(async (req, res) => {
   }
   params.push(limit);
   const rows = await query(
-    `SELECT device, id, to_char(ts,'YYYY-MM-DD HH24:MI:SS') AS ts, type, grade, net_kg, manual, worker, note,
+    `SELECT device, id, sale_id, to_char(ts,'YYYY-MM-DD HH24:MI:SS') AS ts, type, grade, net_kg, manual, worker, note,
             customer, price_per_kg, amount, user_name, status, cancel_reason
      FROM movements ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
      ORDER BY ts DESC, id DESC LIMIT $${params.length}`,
