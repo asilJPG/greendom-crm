@@ -1,6 +1,6 @@
 const { query } = require('../lib/db');
 const { handler } = require('../lib/http');
-const { MIN_PASSWORD, verifyPassword, hashPassword, makeSessionValue, sessionCookie, audit } = require('../lib/auth');
+const { MIN_PASSWORD, verifyPassword, hashPassword, passwordTaken, makeSessionValue, sessionCookie, audit } = require('../lib/auth');
 
 // Смена своего пароля. После смены прежние входы (на других устройствах) перестают действовать.
 module.exports = handler(
@@ -12,6 +12,8 @@ module.exports = handler(
     if (new_password === old_password) return res.status(400).json({ error: 'Новый пароль должен отличаться от прежнего' });
     const [u] = await query('SELECT * FROM app_users WHERE id=$1', [req.user.id]);
     if (!verifyPassword(old_password, u.pass_hash)) return res.status(400).json({ error: 'Текущий пароль неверный' });
+    // вход идёт по одному паролю, значит у двоих он совпасть не может
+    if (await passwordTaken(new_password, u.id)) return res.status(409).json({ error: 'Такой пароль уже занят, выберите другой' });
     const [upd] = await query(
       'UPDATE app_users SET pass_hash=$1, must_change=false, token_version=token_version+1 WHERE id=$2 RETURNING id, token_version',
       [hashPassword(new_password), u.id]

@@ -1,6 +1,6 @@
 const { query } = require('../lib/db');
 const { handler } = require('../lib/http');
-const { MIN_PASSWORD, hashPassword, audit } = require('../lib/auth');
+const { MIN_PASSWORD, hashPassword, passwordTaken, audit } = require('../lib/auth');
 
 const ROLES = ['admin', 'viewer'];
 
@@ -54,6 +54,7 @@ module.exports = handler(
         const role = ROLES.includes(b.role) ? b.role : 'viewer';
         const [dup] = await query('SELECT 1 FROM app_users WHERE lower(name)=lower($1)', [name]);
         if (dup) return res.status(409).json({ error: 'Такое имя уже есть' });
+        if (await passwordTaken(password)) return res.status(409).json({ error: 'Такой пароль уже используется, выберите другой' });
         const [u] = await query(
           'INSERT INTO app_users(name, role, pass_hash, must_change) VALUES ($1,$2,$3,true) RETURNING id',
           [name, role, hashPassword(password)]
@@ -82,7 +83,9 @@ module.exports = handler(
       let passHash = target.pass_hash;
       let mustChange = target.must_change;
       if (b.password !== undefined) {
-        passHash = hashPassword(cleanPassword(b.password));
+        const pw = cleanPassword(b.password);
+        if (await passwordTaken(pw, id)) return res.status(409).json({ error: 'Такой пароль уже используется, выберите другой' });
+        passHash = hashPassword(pw);
         mustChange = true; // новый пароль задан администратором: человек выберет свой при входе
         bump = true;
       }

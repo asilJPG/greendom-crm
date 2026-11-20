@@ -1,5 +1,6 @@
 // Проверки облачной части на настоящем Postgres (PGlite работает локально, без сети).
-// Цель: попытаться нарушить правила (чужой пароль, поддельная сессия, обход смены пароля, чужие права).
+// Вход идёт по одному паролю (имени нет): пароль определяет пользователя и роль.
+// Цель: попытаться нарушить правила (чужой пароль, подделка сессии, обход смены пароля, чужие права, подбор).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { PGlite } = require('@electric-sql/pglite');
@@ -22,6 +23,8 @@ const report = require('../api/report');
 const movements = require('../api/movements');
 const status = require('../api/status');
 const { todayStr } = require('../lib/http');
+
+const OWNER_PW = '4711-test'; // вымышленные данные; настоящие пароли в тестах не используются
 
 let ipCounter = 0;
 function call(fn, { method = 'GET', body, query = {}, headers = {}, ip } = {}) {
@@ -51,9 +54,9 @@ const BATCH = {
   ],
 };
 const cookieOf = (r) => r.headers['Set-Cookie'].split(';')[0];
-async function signIn(name, pw, ip) {
-  const r = await call(login, { method: 'POST', body: { name, password: pw }, ip });
-  assert.equal(r.code, 200, `вход ${name}: ${JSON.stringify(r.body)}`);
+async function signIn(pw, ip) {
+  const r = await call(login, { method: 'POST', body: { password: pw }, ip });
+  assert.equal(r.code, 200, `вход: ${JSON.stringify(r.body)}`);
   return { cookie: cookieOf(r), body: r.body };
 }
 const as = (cookie) => ({ headers: { cookie } });
@@ -61,19 +64,17 @@ const DATA_ENDPOINTS = [['stock', stock], ['report', report], ['movements', move
 
 // ───────── первичная настройка ─────────
 test('setup: без ключа и с чужим ключом закрыт', async () => {
-  assert.equal((await call(setup, { method: 'POST', body: { name: 'owner', password: '4711-test' } })).code, 401);
-  assert.equal((await call(setup, { method: 'POST', body: { key: 'wrong', name: 'owner', password: '4711-test' } })).code, 401);
+  assert.equal((await call(setup, { method: 'POST', body: { name: 'owner', password: OWNER_PW } })).code, 401);
+  assert.equal((await call(setup, { method: 'POST', body: { key: 'wrong', name: 'owner', password: OWNER_PW } })).code, 401);
   assert.equal((await call(setup, { method: 'GET' })).code, 405);
 });
 
 test('setup: создаёт первого админа один раз, повторно нельзя даже с верным ключом', async () => {
-  const bad = await call(setup, { method: 'POST', body: { key: SETUP, name: 'owner', password: '12' } });
-  assert.equal(bad.code, 400, 'слишком короткий пароль');
-  const ok = await call(setup, { method: 'POST', body: { key: SETUP, name: 'owner', password: '4711-test' } });
+  assert.equal((await call(setup, { method: 'POST', body: { key: SETUP, name: 'owner', password: '12' } })).code, 400, 'слишком короткий');
+  const ok = await call(setup, { method: 'POST', body: { key: SETUP, name: 'owner', password: OWNER_PW } });
   assert.equal(ok.code, 200, JSON.stringify(ok.body));
   assert.equal(ok.body.must_change, false);
-  const again = await call(setup, { method: 'POST', body: { key: SETUP, name: 'hacker', password: 'hackerpass1' } });
-  assert.equal(again.code, 409);
+  assert.equal((await call(setup, { method: 'POST', body: { key: SETUP, name: 'hacker', password: 'hackerpass1' } })).code, 409);
   const [{ n }] = await globalThis.__TEST_DB.query('SELECT count(*)::int AS n FROM app_users');
   assert.equal(n, 1);
 });
@@ -81,7 +82,7 @@ test('setup: создаёт первого админа один раз, пов�
 test('пароль в базе хранится хэшем, а не открытым текстом', async () => {
   const [u] = await globalThis.__TEST_DB.query('SELECT pass_hash FROM app_users');
   assert.match(u.pass_hash, /^scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}$/);
-  assert.ok(!u.pass_hash.includes('4711-test'));
+  assert.ok(!u.pass_hash.includes(OWNER_PW));
 });
 
 // ───────── приёмник (ключ моноблока) ─────────
@@ -100,38 +101,37 @@ test('приёмник: принимает пачку, повторная отп
   assert.equal(n, 4);
 });
 
-// ───────── вход ─────────
-test('вход: неверный пароль и несуществующее имя дают одинаковый ответ (имена не перебрать)', async () => {
-  const a = await call(login, { method: 'POST', body: { name: 'owner', password: 'wrong-pass' } });
-  const b = await call(login, { method: 'POST', body: { name: 'nobody', password: 'wrong-pass' } });
-  assert.equal(a.code, 401);
-  assert.equal(b.code, 401);
-  assert.deepEqual(a.body, b.body);
+// ───────── вход по одному паролю ─────────
+test('вход: неверный, пустой и не-строковый пароль не проходят; инъекция не проходит', async () => {
+  for (const body of [{ password: 'wrong-pass' }, { password: '' }, {}, { password: { $ne: 1 } }, { password: ["' OR '1'='1"] }, { password: "' OR 1=1 --" }]) {
+    assert.equal((await call(login, { method: 'POST', body })).code, 401, JSON.stringify(body));
+  }
+  assert.equal((await call(login, { method: 'POST', body: { name: 'owner', password: 'wrong-pass' } })).code, 401, 'имя больше ничего не даёт');
 });
 
-test('вход: имя без учёта регистра; SQL-инъекция в имени не проходит', async () => {
-  assert.equal((await signIn('OWNER', '4711-test')).body.role, 'admin');
-  const inj = await call(login, { method: 'POST', body: { name: "' OR 1=1 --", password: "' OR '1'='1" } });
-  assert.equal(inj.code, 401);
-  assert.equal((await call(login, { method: 'POST', body: { name: ['owner'], password: { $ne: 1 } } })).code, 401, 'не-строки не приводятся к верным');
+test('вход: пароль определяет пользователя и роль; имя в запросе игнорируется', async () => {
+  const a = await signIn(OWNER_PW);
+  assert.equal(a.body.role, 'admin');
+  assert.equal(a.body.name, 'owner');
+  const b = await call(login, { method: 'POST', body: { name: 'кто-угодно', password: OWNER_PW } });
+  assert.equal(b.body.name, 'owner', 'подставленное имя на результат не влияет');
 });
 
 test('данные закрыты без входа, с мусорной и с подделанной cookie', async () => {
-  const { cookie } = await signIn('owner', '4711-test');
+  const { cookie } = await signIn(OWNER_PW);
   for (const [name, fn] of [...DATA_ENDPOINTS, ['status', status], ['users', users]]) {
     assert.equal((await call(fn)).code, 401, `${name} без cookie`);
     assert.equal((await call(fn, as('cs=abc.def'))).code, 401, `${name} мусор`);
     const forged = cookie.replace(/.$/, (c) => (c === 'a' ? 'b' : 'a'));
     assert.equal((await call(fn, as(forged))).code, 401, `${name} подпись изменена`);
   }
-  // cookie с правильным форматом, но подписанная чужим ключом (имитируем: берём payload админа и подставляем чужую подпись)
   const [payload] = cookie.slice(3).split('.');
   assert.equal((await call(stock, as(`cs=${payload}.AAAA`))).code, 401);
 });
 
 // ───────── данные склада ─────────
 test('остатки, отчёт, история считаются верно', async () => {
-  const { cookie } = await signIn('owner', '4711-test');
+  const { cookie } = await signIn(OWNER_PW);
   const st = await call(stock, as(cookie));
   const by = Object.fromEntries(st.body.rows.map((x) => [x.grade, x]));
   assert.equal(by['Высший'].balance_kg, 70);
@@ -150,7 +150,7 @@ test('отмена на моноблоке доходит до облака и �
   const cancelled = { ...BATCH, movements: [M({ id: 3, type: 'out', grade: 'Высший', net_kg: 30, sale_id: 1, customer: 'ООО Базар',
     price_per_kg: 20000, amount: 600000, status: 'cancelled', cancel_reason: 'покупатель отказался', cancelled_ts: `${today} 11:00:00` })] };
   assert.equal((await call(ingest, { method: 'POST', body: cancelled, headers: AUTH })).code, 200);
-  const { cookie } = await signIn('owner', '4711-test');
+  const { cookie } = await signIn(OWNER_PW);
   assert.equal((await call(stock, as(cookie))).body.rows.find((x) => x.grade === 'Высший').balance_kg, 100);
   const rep = await call(report, { query: {}, ...as(cookie) });
   assert.equal(rep.body.by_grade.find((x) => x.grade === 'Высший').amount, 0);
@@ -158,15 +158,18 @@ test('отмена на моноблоке доходит до облака и �
 });
 
 // ───────── пользователи, роли, смена пароля ─────────
-test('админ создаёт пользователя; временный пароль не пускает к данным до смены', async () => {
-  const { cookie: admin } = await signIn('owner', '4711-test');
-  assert.equal((await call(users, { method: 'POST', body: { name: 'Бахтиёр', password: 'short', role: 'viewer' }, ...as(admin) })).code, 400, 'короткий пароль');
-  assert.equal((await call(users, { method: 'POST', body: { name: 'Б', password: 'longenough1', role: 'viewer' }, ...as(admin) })).code, 400, 'короткое имя');
-  const add = await call(users, { method: 'POST', body: { name: 'Бахтиёр', password: 'viewerpass1', role: 'viewer' }, ...as(admin) });
-  assert.equal(add.code, 200, JSON.stringify(add.body));
-  assert.equal((await call(users, { method: 'POST', body: { name: 'бахтиёр', password: 'viewerpass2', role: 'viewer' }, ...as(admin) })).code, 409, 'имя занято без учёта регистра');
+test('админ создаёт пользователя; одинаковые пароли не принимаются; временный пароль не пускает к данным', async () => {
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const add = (body) => call(users, { method: 'POST', body, ...as(admin) });
+  assert.equal((await add({ name: 'Бахтиёр', password: 'short', role: 'viewer' })).code, 400, 'короткий пароль');
+  assert.equal((await add({ name: 'Б', password: 'longenough1', role: 'viewer' })).code, 400, 'короткое имя');
+  assert.equal((await add({ name: 'Бахтиёр', password: OWNER_PW, role: 'viewer' })).code, 409, 'чужой пароль занят: двое с одним паролем невозможны');
+  assert.equal((await add({ name: 'Бахтиёр', password: 'viewerpass1', role: 'viewer' })).code, 200);
+  assert.equal((await add({ name: 'бахтиёр', password: 'viewerpass2', role: 'viewer' })).code, 409, 'имя занято без учёта регистра');
+  assert.equal((await add({ name: 'Другой', password: 'viewerpass1', role: 'viewer' })).code, 409, 'пароль нового пользователя уже занят');
 
-  const v = await signIn('Бахтиёр', 'viewerpass1');
+  const v = await signIn('viewerpass1');
+  assert.equal(v.body.role, 'viewer', 'роль определена по паролю');
   assert.equal(v.body.must_change, true);
   for (const [name, fn] of DATA_ENDPOINTS) {
     const r = await call(fn, as(v.cookie));
@@ -178,21 +181,23 @@ test('админ создаёт пользователя; временный п�
   assert.deepEqual(st.body.devices, [], 'до смены пароля данные склада не отдаются даже через status');
 });
 
-test('смена пароля: правила, и старая сессия после смены перестаёт работать', async () => {
-  const v = await signIn('Бахтиёр', 'viewerpass1');
+test('смена пароля: правила (в т.ч. чужой пароль), старая сессия отзывается', async () => {
+  const v = await signIn('viewerpass1');
   const chg = (body) => call(password, { method: 'POST', body, ...as(v.cookie) });
   assert.equal((await chg({ old_password: 'viewerpass1', new_password: 'short' })).code, 400, 'короче 8');
   assert.equal((await chg({ old_password: 'viewerpass1', new_password: 'viewerpass1' })).code, 400, 'тот же пароль');
   assert.equal((await chg({ old_password: 'WRONG-old-pass', new_password: 'brand-new-pass-1' })).code, 400, 'неверный текущий');
+  assert.equal((await chg({ old_password: 'viewerpass1', new_password: OWNER_PW })).code, 409, 'нельзя взять пароль администратора');
   const ok = await chg({ old_password: 'viewerpass1', new_password: 'brand-new-pass-1' });
   assert.equal(ok.code, 200);
   assert.equal((await call(stock, as(v.cookie))).code, 401, 'старая cookie отозвана');
   assert.equal((await call(stock, as(cookieOf(ok)))).code, 200, 'новая cookie работает');
-  assert.equal((await call(login, { method: 'POST', body: { name: 'Бахтиёр', password: 'viewerpass1' } })).code, 401, 'старый пароль не подходит');
+  assert.equal((await call(login, { method: 'POST', body: { password: 'viewerpass1' } })).code, 401, 'старый пароль не подходит');
 });
 
 test('роль «просмотр» не может управлять пользователями и читать журнал', async () => {
-  const { cookie: v } = await signIn('Бахтиёр', 'brand-new-pass-1');
+  const { cookie: v, body } = await signIn('brand-new-pass-1');
+  assert.equal(body.role, 'viewer');
   assert.equal((await call(stock, as(v))).code, 200);
   assert.equal((await call(users, as(v))).code, 403);
   assert.equal((await call(users, { query: { log: '1' }, ...as(v) })).code, 403);
@@ -203,9 +208,8 @@ test('роль «просмотр» не может управлять поль�
 });
 
 test('последнего администратора нельзя убрать ни понижением, ни отключением', async () => {
-  const { cookie: admin } = await signIn('owner', '4711-test');
-  const list = await call(users, as(admin));
-  const me = list.body.find((u) => u.name === 'owner');
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const me = (await call(users, as(admin))).body.find((u) => u.name === 'owner');
   assert.equal((await call(users, { method: 'PATCH', body: { id: me.id, role: 'viewer' }, ...as(admin) })).code, 409);
   assert.equal((await call(users, { method: 'PATCH', body: { id: me.id, active: false }, ...as(admin) })).code, 409);
   assert.equal((await call(users, { method: 'PATCH', body: { id: me.id, role: 'root' }, ...as(admin) })).code, 400, 'неизвестная роль');
@@ -213,60 +217,65 @@ test('последнего администратора нельзя убрат�
   assert.equal((await call(users, { method: 'PATCH', body: { id: 'x', active: false }, ...as(admin) })).code, 404);
 });
 
-test('отключение и сброс пароля отзывают активные входы', async () => {
-  const { cookie: admin } = await signIn('owner', '4711-test');
+test('отключение и сброс пароля отзывают входы; пароль отключённого остаётся занятым', async () => {
+  const { cookie: admin } = await signIn(OWNER_PW);
   const bakh = (await call(users, as(admin))).body.find((u) => u.name === 'Бахтиёр');
-  const v1 = await signIn('Бахтиёр', 'brand-new-pass-1');
-  assert.equal((await call(users, { method: 'PATCH', body: { id: bakh.id, password: 'reset-by-admin-1' }, ...as(admin) })).code, 200);
+  const v1 = await signIn('brand-new-pass-1');
+  const reset = (pw) => call(users, { method: 'PATCH', body: { id: bakh.id, password: pw }, ...as(admin) });
+  assert.equal((await reset(OWNER_PW)).code, 409, 'нельзя назначить пароль другого пользователя');
+  assert.equal((await reset('reset-by-admin-1')).code, 200);
   assert.equal((await call(stock, as(v1.cookie))).code, 401, 'сброс пароля отзывает вход');
-  const v2 = await signIn('Бахтиёр', 'reset-by-admin-1');
+  const v2 = await signIn('reset-by-admin-1');
   assert.equal(v2.body.must_change, true, 'после сброса снова нужен свой пароль');
   assert.equal((await call(users, { method: 'PATCH', body: { id: bakh.id, active: false }, ...as(admin) })).code, 200);
-  assert.equal((await call(stock, as(v2.cookie))).code, 401, 'отключённый пользователь выброшен');
-  assert.equal((await call(login, { method: 'POST', body: { name: 'Бахтиёр', password: 'reset-by-admin-1' } })).code, 401, 'и не может войти');
+  assert.equal((await call(stock, as(v2.cookie))).code, 401, 'отключённый выброшен');
+  assert.equal((await call(login, { method: 'POST', body: { password: 'reset-by-admin-1' } })).code, 401, 'и не может войти');
+  const reuse = await call(users, { method: 'POST', body: { name: 'Новый', password: 'reset-by-admin-1', role: 'viewer' }, ...as(admin) });
+  assert.equal(reuse.code, 409, 'пароль отключённого пользователя нельзя отдать другому');
 });
 
 test('второго админа можно создать, тогда первого можно отключить', async () => {
-  const { cookie: admin } = await signIn('owner', '4711-test');
+  const { cookie: admin } = await signIn(OWNER_PW);
   assert.equal((await call(users, { method: 'POST', body: { name: 'Второй', password: 'secondadmin1', role: 'admin' }, ...as(admin) })).code, 200);
-  const list = (await call(users, as(admin))).body;
-  const first = list.find((u) => u.name === 'owner');
+  const first = (await call(users, as(admin))).body.find((u) => u.name === 'owner');
   assert.equal((await call(users, { method: 'PATCH', body: { id: first.id, active: false }, ...as(admin) })).code, 200);
   assert.equal((await call(stock, as(admin))).code, 401);
-  const second = await signIn('Второй', 'secondadmin1');
-  assert.equal(second.body.must_change, true);
-  // вернём первого, чтобы дальше тесты шли под ним (через второго, после смены его пароля)
+  assert.equal((await call(login, { method: 'POST', body: { password: OWNER_PW } })).code, 401, 'отключённый админ не входит');
+  const second = await signIn('secondadmin1');
+  assert.equal(second.body.role, 'admin');
   const ch = await call(password, { method: 'POST', body: { old_password: 'secondadmin1', new_password: 'second-admin-ok-1' }, ...as(second.cookie) });
-  const re = await call(users, { method: 'PATCH', body: { id: first.id, active: true }, ...as(cookieOf(ch)) });
-  assert.equal(re.code, 200);
+  assert.equal((await call(users, { method: 'PATCH', body: { id: first.id, active: true }, ...as(cookieOf(ch)) })).code, 200);
 });
 
-test('журнал: пишет входы, неудачи и действия, доступен только админу', async () => {
-  const { cookie } = await signIn('owner', '4711-test');
+test('журнал: пишет входы, неудачи и действия, доступен только админу, пароли не попадают', async () => {
+  const { cookie } = await signIn(OWNER_PW);
   const log = await call(users, { query: { log: '1' }, ...as(cookie) });
   assert.equal(log.code, 200);
   const actions = new Set(log.body.map((a) => a.action));
   for (const a of ['setup', 'login', 'login_fail', 'user_add', 'user_edit', 'password_change']) assert.ok(actions.has(a), `нет записи ${a}`);
-  assert.ok(!JSON.stringify(log.body).includes('4711-test'), 'пароли в журнал не попадают');
-  assert.ok(!JSON.stringify(log.body).includes('brand-new-pass'));
+  const text = JSON.stringify(log.body);
+  for (const secret of [OWNER_PW, 'viewerpass1', 'brand-new-pass', 'reset-by-admin', 'secondadmin1']) assert.ok(!text.includes(secret), `пароль ${secret} в журнале`);
 });
 
-// ───────── подбор пароля (в конце: меняет глобальное состояние блокировок) ─────────
-test('подбор: 5 ошибок с одного адреса блокируют вход, даже с верным паролем', async () => {
+// ───────── подбор (в конце: меняет глобальное состояние блокировок) ─────────
+test('подбор: 5 ошибок с одного адреса блокируют вход, даже с верным паролем; другой адрес не затронут', async () => {
   const ip = '203.0.113.7';
-  for (let i = 0; i < 5; i++) assert.equal((await call(login, { method: 'POST', body: { name: 'nobody', password: 'x' + i }, ip })).code, 401);
-  assert.equal((await call(login, { method: 'POST', body: { name: 'nobody', password: 'x' }, ip })).code, 423);
-  assert.equal((await call(login, { method: 'POST', body: { name: 'owner', password: '4711-test' }, ip })).code, 423, 'верный пароль с заблокированного адреса не принят');
-  assert.equal((await call(login, { method: 'POST', body: { name: 'owner', password: '4711-test' }, ip: '203.0.113.8' })).code, 200, 'другой адрес не затронут');
+  for (let i = 0; i < 5; i++) assert.equal((await call(login, { method: 'POST', body: { password: 'guess' + i }, ip })).code, 401);
+  assert.equal((await call(login, { method: 'POST', body: { password: 'guess' }, ip })).code, 423);
+  assert.equal((await call(login, { method: 'POST', body: { password: OWNER_PW }, ip })).code, 423, 'верный пароль с заблокированного адреса не принят');
+  assert.equal((await call(login, { method: 'POST', body: { password: OWNER_PW }, ip: '203.0.113.8' })).code, 200);
 });
 
-test('подбор: распределённый перебор одного имени (разные адреса) тоже упирается в блокировку по имени', async () => {
-  for (let i = 0; i < 8; i++) {
-    const r = await call(login, { method: 'POST', body: { name: 'Второй', password: 'guess' + i }, ip: `198.51.100.${i + 1}` });
+test('подбор: распределённый перебор с разных адресов упирается в общий предел, верный пароль тоже закрыт', async () => {
+  let blockedAt = 0;
+  for (let i = 1; i <= 40; i++) {
+    const r = await call(login, { method: 'POST', body: { password: 'spray' + i }, ip: `198.51.100.${i}` });
+    if (r.code === 423) { blockedAt = i; break; }
     assert.equal(r.code, 401);
   }
-  const blocked = await call(login, { method: 'POST', body: { name: 'Второй', password: 'second-admin-ok-1' }, ip: '198.51.100.99' });
-  assert.equal(blocked.code, 423, 'после 8 неудач имя заблокировано для всех адресов');
+  assert.ok(blockedAt > 0, 'общая блокировка так и не сработала за 40 попыток');
+  const valid = await call(login, { method: 'POST', body: { password: OWNER_PW }, ip: '198.51.100.200' });
+  assert.equal(valid.code, 423, 'во время общей блокировки не входит никто (цена защиты: 15 минут без входа для всех)');
 });
 
 test('выход: cookie сбрасывается', async () => {

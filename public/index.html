@@ -63,8 +63,7 @@
 <div class="center" id="login" hidden>
   <div class="logo" style="margin:0;font-size:26px"><svg><use href="#leaf"/></svg> Склад: просмотр</div>
   <div class="card" style="width:min(380px,100%)">
-    <div class="field"><label class="f" for="lg-name">Имя</label><input id="lg-name" autocomplete="username" autocapitalize="none"></div>
-    <div class="field"><label class="f" for="lg-pw">Пароль</label><input id="lg-pw" type="password" autocomplete="current-password"></div>
+    <div class="field"><label class="f" for="lg-pw">Пароль</label><input id="lg-pw" type="password" autocomplete="current-password" autofocus></div>
     <button class="btn" style="width:100%" id="lg-go">Войти</button>
     <div class="err" id="lg-err" style="margin-top:8px"></div>
   </div>
@@ -119,9 +118,9 @@
     <div class="card"><h2>Пользователи сайта</h2>
       <table><thead><tr><th>Имя</th><th>Роль</th><th>Статус</th><th>Последний вход</th><th></th></tr></thead><tbody id="u-rows"></tbody></table></div>
     <div class="card"><h2>Добавить пользователя</h2>
-      <div class="row"><input id="u-name" class="grow" placeholder="Имя (для входа)" autocapitalize="none"><input id="u-pw" class="grow" type="password" placeholder="Временный пароль, от 8 символов" autocomplete="new-password">
+      <div class="row"><input id="u-name" class="grow" placeholder="Имя (подпись в списке и журнале)"><input id="u-pw" class="grow" type="password" placeholder="Временный пароль, от 8 символов" autocomplete="new-password">
         <select id="u-role" style="width:auto"><option value="viewer">Просмотр</option><option value="admin">Администратор</option></select><button class="btn" id="u-add">Добавить</button></div>
-      <div class="small muted" style="margin-top:8px">Человек войдёт с этим паролем и сразу выберет свой. «Просмотр» видит остатки, отчёты и историю; управлять пользователями может только администратор.</div>
+      <div class="small muted" style="margin-top:8px">Вход только по паролю: по нему сайт узнаёт человека и его роль, поэтому у каждого пароль свой (одинаковые не принимаются). Человек войдёт с этим паролем и сразу выберет свой. «Просмотр» видит остатки, отчёты и историю; управлять пользователями может только администратор.</div>
       <div class="err" id="u-err" style="margin-top:8px"></div></div>
     <div class="card"><h2>Журнал входов и действий</h2>
       <table><thead><tr><th>Время</th><th>Кто</th><th>Действие</th><th>Детали</th><th>IP</th></tr></thead><tbody id="a-rows"></tbody></table></div>
@@ -145,6 +144,7 @@ const money = v => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDigit
 const iso = d => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const shift = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
 let cur = 'сум', tab = 'stock', timer = null, me = null, toastT = null;
+let lastPw = ''; // пароль, только что введённый при входе: нужен один раз, если его сразу просят сменить (в памяти, не сохраняется)
 
 function toast(t, bad) { const e = $('toast'); e.textContent = t; e.className = 'toast show' + (bad ? ' bad' : ''); clearTimeout(toastT); toastT = setTimeout(() => e.className = 'toast', 3200); }
 async function call(method, path, body) {
@@ -162,22 +162,26 @@ async function api(method, path, body) {
 const msg = r => (r.data && r.data.error) || 'Ошибка';
 
 function show(which) { ['login', 'force', 'app'].forEach(k => $(k).hidden = k !== which); }
-function showLogin() { clearInterval(timer); me = null; show('login'); $('lg-pw').value = ''; }
-function showForce() { clearInterval(timer); show('force'); ['fc-old', 'fc-new', 'fc-new2'].forEach(i => $(i).value = ''); $('fc-err').textContent = ''; }
+function showLogin() { clearInterval(timer); me = null; lastPw = ''; show('login'); $('lg-pw').value = ''; $('lg-pw').focus(); }
+function showForce() {
+  clearInterval(timer); show('force'); ['fc-old', 'fc-new', 'fc-new2'].forEach(i => $(i).value = ''); $('fc-err').textContent = '';
+  $('fc-old').parentElement.hidden = !!lastPw; // только что ввели этот пароль: второй раз не спрашиваем
+}
 
 /* ───── вход ───── */
 $('lg-go').onclick = login; $('lg-pw').onkeydown = e => { if (e.key === 'Enter') login(); };
 async function login() {
-  const r = await call('POST', '/api/login', { name: $('lg-name').value, password: $('lg-pw').value });
+  const pw = $('lg-pw').value;
+  const r = await call('POST', '/api/login', { password: pw });
   if (!r.ok) { $('lg-err').textContent = msg(r); return; }
-  $('lg-err').textContent = ''; await start();
+  lastPw = pw; $('lg-err').textContent = ''; await start();
 }
 $('logout').onclick = async () => { await call('POST', '/api/logout'); showLogin(); };
 $('fc-go').onclick = async () => {
   if ($('fc-new').value !== $('fc-new2').value) { $('fc-err').textContent = 'Пароли не совпадают'; return; }
-  const r = await call('POST', '/api/password', { old_password: $('fc-old').value, new_password: $('fc-new').value });
+  const r = await call('POST', '/api/password', { old_password: lastPw || $('fc-old').value, new_password: $('fc-new').value });
   if (!r.ok) { $('fc-err').textContent = msg(r); return; }
-  await start();
+  lastPw = ''; await start();
 };
 
 /* ───── смена пароля: свой или (админ) новый временный для другого ───── */
