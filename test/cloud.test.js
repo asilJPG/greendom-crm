@@ -723,6 +723,25 @@ test('CRM-карточка контрагента, многострочный а
   assert.equal(savedAct.doc_number, 'СЧ-77');
   assert.equal(savedAct.items.length, 2);
 
+  // Редактирование проведённого акта расхода
+  const editAct = await call(report, {
+    method: 'PATCH',
+    query: { resource: 'expenses' },
+    body: {
+      target: 'expense',
+      action: 'edit',
+      id: act.body.id,
+      doc_number: 'СЧ-77-А',
+      items: [{ name: 'Лента капельного полива', qty: 3, unit: 'шт', price: 120000 }],
+    },
+    ...as(dir),
+  });
+  assert.equal(editAct.code, 200);
+  const expEdited = await call(report, { query: { resource: 'expenses', from: today, to: today }, ...as(dir) });
+  const editedRow = expEdited.body.items.find((x) => x.id === act.body.id);
+  assert.equal(editedRow.amount, 360000);
+  assert.equal(editedRow.doc_number, 'СЧ-77-А');
+
   // Инвестиции: создание, расчёт окупаемости и отмена
   const inv1 = await call(report, {
     method: 'POST',

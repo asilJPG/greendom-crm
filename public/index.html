@@ -256,7 +256,7 @@
 
       <div id="e-new-view" hidden>
         <button type="button" class="back-btn" id="exp-back">← Расходы</button>
-        <h1 class="page">Новый акт расхода</h1>
+        <h1 class="page" id="exp-form-title">Новый акт расхода</h1>
         <p class="sub">Заполните шапку документа и позиции расхода (как в iiko / 1С)</p>
         <div class="card stack">
           <div class="daterow">
@@ -304,6 +304,7 @@
             <h1 class="page" id="ev-title">Акт расхода</h1>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn" id="ev-edit-btn" hidden>Изменить</button>
             <button type="button" class="btn sec" id="ev-print">Печать / PDF</button>
             <button type="button" class="btn ghost danger" id="ev-cancel-btn" hidden>Отменить акт</button>
           </div>
@@ -331,7 +332,7 @@
 
       <div id="inv-doc-view" hidden>
         <button type="button" class="back-btn" id="inv-back">← Инвестиции</button>
-        <h1 class="page">Новое капитальное вложение</h1>
+        <h1 class="page" id="inv-form-title">Новое капитальное вложение</h1>
         <p class="sub">Учитывается отдельно от операционных расходов для точного расчёта ОПиУ и окупаемости</p>
         <div class="card stack">
           <div class="daterow">

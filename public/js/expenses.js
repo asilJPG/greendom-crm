@@ -16,6 +16,7 @@ let categories = [];
 let loadedItems = [];
 let payMethod = 'cash';
 let draftLines = [];
+let editingActId = null;
 let viewingAct = null;
 
 function showExpView(mode) {
@@ -144,7 +145,10 @@ function renderDraftLines() {
 }
 
 function openNewActPage() {
+  editingActId = null;
   payMethod = 'cash';
+  $('exp-form-title').textContent = 'Новый акт расхода';
+  $('exp-save').textContent = 'Провести акт расхода';
   $('exp-err').textContent = '';
   $('exp-date').value = iso(new Date());
   $('exp-docno').value = '';
@@ -152,6 +156,27 @@ function openNewActPage() {
   $('exp-comment').value = '';
   document.querySelectorAll('#exp-pay-chips .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
   draftLines = [{ name: '', qty: 1, unit: 'усл', price: '', sum: '' }];
+  renderDraftLines();
+  showExpView('new');
+  $('exp-cp').focus();
+}
+
+function openEditActPage(x) {
+  editingActId = x.id;
+  payMethod = x.payment_method || 'cash';
+  $('exp-form-title').textContent = `Редактирование акта №${x.id}`;
+  $('exp-save').textContent = 'Сохранить изменения';
+  $('exp-err').textContent = '';
+  $('exp-date').value = x.doc_date || iso(new Date());
+  $('exp-docno').value = x.doc_number || '';
+  $('exp-cat').value = String(x.category_id);
+  $('exp-cp').value = x.counterparty || '';
+  $('exp-comment').value = x.comment || '';
+  document.querySelectorAll('#exp-pay-chips .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
+  const items = Array.isArray(x.items) && x.items.length ? x.items : null;
+  draftLines = items
+    ? items.map((it) => ({ name: it.name || '', qty: it.qty ?? 1, unit: it.unit || 'шт', price: it.price ?? '', sum: it.sum ?? '' }))
+    : [{ name: x.comment || x.category_name || '', qty: 1, unit: 'усл', price: x.amount, sum: x.amount }];
   renderDraftLines();
   showExpView('new');
   $('exp-cp').focus();
@@ -209,9 +234,11 @@ function openActViewPage(x) {
   viewingAct = x;
   const me = deps.me();
   const today = iso(new Date());
+  const canEdit = x.status === 'active' && me && (me.role === 'admin' || me.role === 'director');
   const canCancel = x.status === 'active' && me && (me.role === 'admin' || (me.role === 'director' && x.user_name === me.name && x.doc_date === today));
   $('ev-title').textContent = `Акт расхода №${x.id}`;
   $('ev-sheet').innerHTML = buildActSheetHtml(x);
+  $('ev-edit-btn').hidden = !canEdit;
   $('ev-cancel-btn').hidden = !canCancel;
   showExpView('view');
 }
@@ -321,7 +348,7 @@ export function initExpenses(config) {
     }
     b.disabled = true;
     try {
-      const r = await api('POST', '/api/report?resource=expenses', {
+      const payload = {
         target: 'expense',
         doc_date: $('exp-date').value,
         doc_number: $('exp-docno').value,
@@ -331,9 +358,12 @@ export function initExpenses(config) {
         counterparty: $('exp-cp').value,
         payment_method: payMethod,
         comment: $('exp-comment').value,
-      });
+      };
+      const r = editingActId
+        ? await api('PATCH', '/api/report?resource=expenses', { ...payload, id: editingActId, action: 'edit' })
+        : await api('POST', '/api/report?resource=expenses', payload);
       if (!r.ok) { $('exp-err').textContent = errMsg(r); return; }
-      deps.toast(`Акт расхода №${r.data.id} проведён`);
+      deps.toast(editingActId ? `Акт №${editingActId} обновлён` : `Акт расхода №${r.data.id} проведён`);
       await loadExpenses();
     } finally {
       b.disabled = false;
@@ -342,6 +372,7 @@ export function initExpenses(config) {
 
   // Страница просмотра акта
   $('ev-back').onclick = () => showExpView('list');
+  $('ev-edit-btn').onclick = () => { if (viewingAct) openEditActPage(viewingAct); };
   $('ev-print').onclick = () => {
     if (!viewingAct) return;
     $('print-root').innerHTML = buildActSheetHtml(viewingAct);

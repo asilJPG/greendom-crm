@@ -21,6 +21,7 @@ const INV_CATS = [
 
 let deps = { cur: () => 'сум', toast: () => {}, askText: async () => null };
 let payMethod = 'transfer';
+let editingInvId = null;
 
 function showSubView(mode) {
   $('inv-list-view').hidden = mode !== 'list';
@@ -28,15 +29,18 @@ function showSubView(mode) {
   window.scrollTo(0, 0);
 }
 
-function openNewInvestment() {
-  payMethod = 'transfer';
-  $('inv-f-date').value = iso(new Date());
-  $('inv-f-title').value = '';
-  $('inv-f-cat').value = INV_CATS[0];
-  $('inv-f-investor').value = '';
-  $('inv-f-amt').value = '';
-  $('inv-f-docno').value = '';
-  $('inv-f-comment').value = '';
+function openInvestmentForm(x = null) {
+  editingInvId = x ? x.id : null;
+  payMethod = x ? (x.payment_method || 'transfer') : 'transfer';
+  $('inv-form-title').textContent = x ? `Редактирование вложения №${x.id}` : 'Новое капитальное вложение';
+  $('inv-f-save').textContent = x ? 'Сохранить изменения' : 'Сохранить вложение';
+  $('inv-f-date').value = x ? x.doc_date : iso(new Date());
+  $('inv-f-title').value = x ? x.title : '';
+  $('inv-f-cat').value = x && INV_CATS.includes(x.category) ? x.category : INV_CATS[0];
+  $('inv-f-investor').value = x ? (x.investor || '') : '';
+  $('inv-f-amt').value = x ? String(x.amount) : '';
+  $('inv-f-docno').value = x ? (x.doc_number || '') : '';
+  $('inv-f-comment').value = x ? (x.comment || '') : '';
   $('inv-f-err').textContent = '';
   document.querySelectorAll('#inv-f-pm .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
   showSubView('doc');
@@ -116,7 +120,12 @@ export async function loadInvestments() {
     b.onclick = (e) => {
       e.stopPropagation();
       const id = Number(b.dataset.invMenu);
+      const item = items.find((x) => x.id === id);
       openRowMenu(b, [
+        {
+          label: 'Изменить вложение',
+          onClick: () => { if (item) openInvestmentForm(item); },
+        },
         {
           label: 'Отменить вложение',
           danger: true,
@@ -136,7 +145,7 @@ export async function loadInvestments() {
 export function initInvestments(config) {
   deps = config;
   $('inv-f-cat').innerHTML = INV_CATS.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  $('inv-open-add').onclick = openNewInvestment;
+  $('inv-open-add').onclick = () => openInvestmentForm(null);
   $('inv-back').onclick = () => showSubView('list');
   $('inv-f-cancel').onclick = () => showSubView('list');
 
@@ -151,7 +160,7 @@ export function initInvestments(config) {
     const b = $('inv-f-save');
     b.disabled = true;
     try {
-      const r = await api('POST', '/api/report?resource=investments', {
+      const payload = {
         doc_date: $('inv-f-date').value,
         category: $('inv-f-cat').value,
         title: $('inv-f-title').value,
@@ -160,9 +169,12 @@ export function initInvestments(config) {
         payment_method: payMethod,
         doc_number: $('inv-f-docno').value,
         comment: $('inv-f-comment').value,
-      });
+      };
+      const r = editingInvId
+        ? await api('PATCH', '/api/report?resource=investments', { ...payload, id: editingInvId, action: 'edit' })
+        : await api('POST', '/api/report?resource=investments', payload);
       if (!r.ok) { $('inv-f-err').textContent = errMsg(r); return; }
-      deps.toast('Инвестиция записана');
+      deps.toast(editingInvId ? 'Вложение обновлено' : 'Инвестиция записана');
       await loadInvestments();
     } finally {
       b.disabled = false;
