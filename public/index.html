@@ -28,6 +28,7 @@
   <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12 M18 6 6 18"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 6 M20 4v7h-7"/></symbol>
   <symbol id="i-faceid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2 M16 4h2a2 2 0 0 1 2 2v2 M20 16v2a2 2 0 0 1-2 2h-2 M8 20H6a2 2 0 0 1-2-2v-2 M9 9v1.5 M15 9v1.5 M12 9v3.5h-1 M9 15.5c.8 1 1.8 1.5 3 1.5s2.2-.5 3-1.5"/></symbol>
+  <symbol id="i-dl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11 M7.5 10.5 12 15l4.5-4.5 M4 19h16"/></symbol>
   <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l5-5-5-5 M20 12H9 M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/></symbol>
 </svg>
 
@@ -87,13 +88,19 @@
     </section>
 
     <section id="p-report" hidden>
-      <h1 class="page">Отчёт</h1>
-      <p class="sub">Приход, продажи и выручка за период</p>
+      <div class="page-head">
+        <div>
+          <h1 class="page">Отчёт</h1>
+          <p class="sub">Выручка, объёмы, потери и динамика за период</p>
+        </div>
+        <button class="btn sec" id="r-csv"><svg><use href="#i-dl"/></svg>Скачать Excel</button>
+      </div>
       <div class="card filters">
         <div class="chips">
-          <button class="chip" data-range="month">Этот месяц</button><button class="chip" data-range="0">Сегодня</button><button class="chip" data-range="6">7 дней</button><button class="chip" data-range="29">30 дней</button>
+          <button class="chip" data-range="month">Этот месяц</button><button class="chip" data-range="prevmonth">Прошлый месяц</button><button class="chip" data-range="0">Сегодня</button><button class="chip" data-range="6">7 дней</button><button class="chip" data-range="29">30 дней</button>
         </div>
         <div class="daterow"><input type="date" id="r-from" aria-label="С даты"><input type="date" id="r-to" aria-label="По дату"></div>
+        <div class="daterow"><select id="r-grade" aria-label="Сорт"><option value="">Все сорта</option></select><select id="r-cust" aria-label="Покупатель"><option value="">Все покупатели</option></select></div>
         <button class="btn block" id="r-go">Показать</button>
       </div>
       <div id="r-body"></div>
@@ -241,6 +248,16 @@
   <div class="acts" style="justify-content:flex-end"><button class="btn sec" id="pr-cancel">Отмена</button><button class="btn" id="pr-ok">Сохранить</button></div>
 </dialog>
 
+<dialog id="inv-dlg">
+  <div id="inv-body"></div>
+  <div class="acts" style="justify-content:flex-end;margin-top:16px">
+    <button class="btn sec" id="inv-close">Закрыть</button>
+    <button class="btn sec" id="inv-png">Картинка PNG</button>
+    <button class="btn" id="inv-print">Печать / PDF</button>
+  </div>
+</dialog>
+
+<div id="print-root"></div>
 <div class="toast" id="toast"></div>
 <script type="module" src="/js/app.js"></script>
 </body>

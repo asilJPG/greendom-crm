@@ -1,6 +1,8 @@
 import { api, rawCall, errMsg, configureAuthHandlers } from './api.js';
 import { initScale, autoConnectScale } from './scale.js';
 import { isPasskeySupported, registerPasskey, loginWithPasskey } from './passkey.js';
+import { initReport, loadReport } from './report.js';
+import { initInvoice, openInvoice } from './invoice.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -34,9 +36,11 @@ const state = {
   me: null,
   tab: 'stock',
   cur: 'сум',
+  crop: 'Клубника',
   grades: [],
   gradeIdx: {},
   histMap: {},
+  histRows: [],
   hType: '',
   lastSeenSec: 0,
   lastPw: '',
@@ -247,6 +251,7 @@ function paintStatus(d) {
   state.grades = Array.isArray(dev.grades) ? dev.grades : [];
   state.lastSeenSec = dev.seconds_ago;
   state.cur = dev.currency || 'сум';
+  state.crop = dev.crop || 'Клубника';
   $('title').textContent = 'Склад' + (dev.crop ? ' · ' + dev.crop : '');
   const m = Math.floor(dev.seconds_ago / 60);
   $('seen').textContent = m < 1 ? 'сейчас' : m < 60 ? m + ' мин' : Math.floor(m / 60) + ' ч';
@@ -295,46 +300,24 @@ async function loadStock() {
   ).join('') || '<div class="empty">Данных ещё нет</div>';
 }
 
-/* ───── отчёт ───── */
-async function loadReport() {
-  const r = await api('GET', `/api/report?from=${$('r-from').value}&to=${$('r-to').value}`);
-  if (!r.ok) return;
-  const d = r.data;
-  const sum = (k) => d.by_grade.reduce((a, x) => a + x[k], 0);
-  const tOut = sum('out_kg');
-  const tAmt = sum('amount');
-  const section = (title, rows) => `<div class="card"><h2>${title}</h2>${rows.length ? `<ul class="list">${rows.join('')}</ul>` : '<div class="muted">Нет данных за период</div>'}</div>`;
-
-  $('r-body').innerHTML = `
-    <div class="kpis">
-      <div class="kpi"><div class="k">Выручка</div><div class="v">${money(tAmt)} <small>${esc(state.cur)}</small></div></div>
-      <div class="kpi"><div class="k">Продано</div><div class="v">${kg(tOut)} <small>кг</small></div></div>
-      <div class="kpi"><div class="k">Приход</div><div class="v">${kg(sum('in_kg'))} <small>кг</small></div></div>
-      <div class="kpi"><div class="k">Средняя цена</div><div class="v">${tOut ? money(tAmt / tOut) : '—'} <small>${esc(state.cur)}/кг</small></div></div>
-      <div class="kpi"><div class="k">Списано</div><div class="v">${kg(sum('writeoff_kg'))} <small>кг</small></div></div>
-    </div>
-    <div class="muted small" style="margin:-2px 2px 14px">Ручных записей веса: ${d.manual_entries} · отменённых операций: ${d.cancelled_entries}</div>
-    ${section('По сортам', d.by_grade.map((x) => row(`<span class="sw" style="--gc:${gradeColor(x.grade)};margin-right:8px"></span>${esc(x.grade)}`, `приход ${kg(x.in_kg)} · продано ${kg(x.out_kg)} · списано ${kg(x.writeoff_kg)}`, `${money(x.amount)}`)))}
-    ${section('По дням', d.by_day.map((x) => row(dm(x.day), `приход ${kg(x.in_kg)} · продано ${kg(x.out_kg)} кг`, `${money(x.amount)}`)))}
-    ${section('Кто сколько собрал', d.by_worker.map((x) => row(esc(x.worker), `${x.crates} ящ.`, `${kg(x.kg)} кг`)))}
-    ${section('Покупатели', d.by_customer.map((x) => row(esc(x.customer), `${kg(x.kg)} кг`, `${money(x.amount)} ${esc(state.cur)}`)))}`;
-}
-
 /* ───── история ───── */
 function rowActions(m) {
   if (m.status === 'cancelled' || !state.me) return '';
   const key = `${m.device}:${m.id}`;
   state.histMap[key] = m;
   const mine = state.me.role === 'keeper' && m.user_name === state.me.name && m.ts.slice(0, 10) === iso(new Date());
-  if (state.me.role !== 'admin' && !mine) return '';
-  return `<div class="acts"><button class="btn sec sm" data-a="cancel" data-k="${esc(key)}">Отменить${m.sale_id ? ' продажу' : ''}</button>` +
-    `${state.me.role === 'admin' ? `<button class="btn sec sm" data-a="edit" data-k="${esc(key)}">Исправить</button>` : ''}</div>`;
+  const btns = [];
+  if (m.type === 'out') btns.push(`<button class="btn sec sm" data-a="inv" data-k="${esc(key)}">Накладная</button>`);
+  if (state.me.role === 'admin' || mine) btns.push(`<button class="btn sec sm" data-a="cancel" data-k="${esc(key)}">Отменить${m.sale_id ? ' продажу' : ''}</button>`);
+  if (state.me.role === 'admin') btns.push(`<button class="btn sec sm" data-a="edit" data-k="${esc(key)}">Исправить</button>`);
+  return btns.length ? `<div class="acts">${btns.join('')}</div>` : '';
 }
 
 async function loadHistory() {
   const r = await api('GET', `/api/movements?type=${state.hType}&day=${$('h-day').value}&limit=200`);
   if (!r.ok) return;
   state.histMap = {};
+  state.histRows = r.data;
   $('h-rows').innerHTML = r.data.map((m) => {
     const [tn, tc, col] = TYPE_META[m.type];
     const who = m.type === 'out' ? (m.customer || '') : m.type === 'in' ? (m.worker || '') : (m.note || '');
@@ -615,9 +598,20 @@ $('refresh').onclick = async () => {
 };
 
 document.querySelectorAll('[data-range]').forEach((b) => (b.onclick = () => {
-  const today = iso(new Date());
-  $('r-from').value = b.dataset.range === 'month' ? today.slice(0, 8) + '01' : shift(+b.dataset.range);
-  $('r-to').value = today;
+  const now = new Date();
+  const today = iso(now);
+  if (b.dataset.range === 'month') {
+    $('r-from').value = today.slice(0, 8) + '01';
+    $('r-to').value = today;
+  } else if (b.dataset.range === 'prevmonth') {
+    const firstPrev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastPrev = new Date(now.getFullYear(), now.getMonth(), 0);
+    $('r-from').value = iso(firstPrev);
+    $('r-to').value = iso(lastPrev);
+  } else {
+    $('r-from').value = shift(+b.dataset.range);
+    $('r-to').value = today;
+  }
   loadReport();
 }));
 $('r-go').onclick = loadReport;
@@ -636,6 +630,24 @@ $('h-rows').onclick = async (e) => {
   if (!b) return;
   const m = state.histMap[b.dataset.k];
   if (!m) return;
+  if (b.dataset.a === 'inv') {
+    const items = m.sale_id
+      ? state.histRows.filter((x) => x.device === m.device && x.sale_id === m.sale_id && x.status === 'active')
+      : [m];
+    const sale = {
+      device: m.device,
+      sale_id: m.sale_id || m.id,
+      ts: m.ts,
+      customer: m.customer || '—',
+      user_name: m.user_name || '',
+      note: m.note || '',
+      total_kg: Math.round(items.reduce((a, i) => a + Number(i.net_kg || 0), 0) * 1000) / 1000,
+      total_amount: Math.round(items.reduce((a, i) => a + Number(i.amount || 0), 0) * 100) / 100,
+      items,
+    };
+    openInvoice(sale, { crop: state.crop, cur: state.cur });
+    return;
+  }
   if (b.dataset.a === 'cancel') {
     const reason = await askText({
       title: m.sale_id ? 'Отменить продажу' : 'Отменить запись',
@@ -719,4 +731,11 @@ $('ed-ok').onclick = async () => {
 };
 
 initScale(toast);
+initInvoice(toast);
+initReport({
+  cur: () => state.cur,
+  crop: () => state.crop,
+  gradeColor,
+  openHistoryDay: (day) => { $('h-day').value = day; navigate('history'); },
+});
 start();

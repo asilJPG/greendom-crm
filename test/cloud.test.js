@@ -36,6 +36,7 @@ function call(fn, { method = 'GET', body, query = {}, headers = {}, ip } = {}) {
       status(c) { this.code = c; return this; },
       setHeader(k, v) { this.headers[k] = v; },
       json(o) { this.body = o; resolve(this); return this; },
+      end(o) { this.body = o; resolve(this); return this; },
     };
     const xff = ip || `10.0.0.${++ipCounter}`; // у каждого запроса свой адрес, если не задан явно
     Promise.resolve(fn({ method, body, query, headers: { 'x-forwarded-for': xff, ...headers } }, res)).catch(reject);
@@ -500,4 +501,25 @@ test('Face ID / Passkey: регистрация, вход с проверкой 
   const del = await call(passkey, { method: 'DELETE', body: { id: credId }, headers: { cookie: admin, host } });
   assert.equal(del.code, 200);
   assert.equal((await call(passkey, { method: 'GET', headers: { cookie: admin, host } })).body.length, 0);
+});
+
+test('отчётная система: сводка, прошлый период, потери %, фильтры, накладные и Excel CSV', async () => {
+  await globalThis.__TEST_DB.query('DELETE FROM login_fails');
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const r = await call(report, { query: { from: today, to: today }, ...as(admin) });
+  assert.equal(r.code, 200);
+  assert.ok(r.body.summary && r.body.prev, 'есть summary и prev');
+  assert.equal(typeof r.body.summary.loss_pct, 'number');
+  assert.ok(Array.isArray(r.body.sales) && r.body.sales.length >= 1, 'есть сгруппированные продажи для накладных');
+  assert.ok(r.body.filters.grades.includes('Высший'));
+
+  const filtered = await call(report, { query: { from: today, to: today, grade: 'Высший' }, ...as(admin) });
+  assert.equal(filtered.code, 200);
+  assert.ok(filtered.body.by_grade.every((g) => g.grade === 'Высший'), 'фильтр по сорту работает');
+
+  const csv = await call(report, { query: { from: today, to: today, format: 'csv' }, ...as(admin) });
+  assert.equal(csv.code, 200);
+  assert.match(csv.headers['Content-Type'], /text\/csv/);
+  assert.ok(String(csv.body).startsWith('\uFEFF'), 'есть UTF-8 BOM для Excel');
+  assert.ok(String(csv.body).includes('Высший'), 'данные попали в CSV');
 });
