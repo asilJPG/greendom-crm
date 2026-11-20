@@ -9,7 +9,7 @@ const money = (v) => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDig
 const dm = (s) => s.slice(8, 10) + '.' + s.slice(5, 7);
 
 let lastData = null;
-let subTab = 'summary'; // summary | days | buyers | workers
+let subTab = 'summary'; // summary | days | buyers
 let chartMetric = 'amount'; // amount | out_kg | in_kg
 let deps = { cur: () => 'сум', crop: () => 'Клубника', gradeColor: () => '#1b1b1b', openHistoryDay: () => {} };
 
@@ -200,20 +200,6 @@ function renderBuyers(d) {
   return `<div class="card"><h2>Покупатели <span class="small muted" style="font-weight:400">(нажмите на покупателя для накладных)</span></h2>${blocks}</div>`;
 }
 
-function renderWorkers(d) {
-  if (!d.by_worker.length) return '<div class="card"><div class="empty">Прихода за период нет</div></div>';
-  const rows = d.by_worker.map((w) => `
-    <li class="li">
-      <div class="l">
-        <div class="t">${esc(w.worker)} <span class="small muted" style="font-weight:500">${w.share_pct}%</span></div>
-        <div class="s">${w.crates} ящ. · в среднем ${kg(w.avg_crate_kg)} кг/ящ</div>
-        <div class="prog"><span style="width:${Math.min(100, w.share_pct)}%"></span></div>
-      </div>
-      <div class="r">${kg(w.kg)} <span class="small muted" style="font-weight:500">кг</span></div>
-    </li>`).join('');
-  return `<div class="card"><h2>Кто сколько собрал</h2><ul class="list">${rows}</ul></div>`;
-}
-
 function renderBody() {
   if (!lastData) return;
   const d = lastData;
@@ -222,13 +208,11 @@ function renderBody() {
       <button class="${subTab === 'summary' ? 'sel' : ''}" data-st="summary">Сводка</button>
       <button class="${subTab === 'days' ? 'sel' : ''}" data-st="days">По дням</button>
       <button class="${subTab === 'buyers' ? 'sel' : ''}" data-st="buyers">Покупатели</button>
-      <button class="${subTab === 'workers' ? 'sel' : ''}" data-st="workers">Сборщики</button>
     </div>`;
 
   const content = subTab === 'summary' ? renderSummary(d)
     : subTab === 'days' ? renderDays(d)
-    : subTab === 'buyers' ? renderBuyers(d)
-    : renderWorkers(d);
+    : renderBuyers(d);
 
   $('r-body').innerHTML = tabsHtml + content;
 
