@@ -266,24 +266,17 @@ function paintStatus(d) {
     if (dl) dl.innerHTML = d.customers.map((c) => `<option value="${esc(c.name)}">`).join('');
   }
   const dev = (d.devices || [])[0];
-  if (!dev) {
-    $('seen').textContent = 'нет данных';
-    $('dot').className = 'dot bad';
-    $('stale').hidden = true;
-    return;
+  if (dev) {
+    if (!state.grades.length && Array.isArray(dev.grades)) state.grades = dev.grades;
+    state.cur = dev.currency || 'сум';
+    state.crop = dev.crop || 'Клубника';
   }
-  if (!state.grades.length && Array.isArray(dev.grades)) state.grades = dev.grades;
-  state.lastSeenSec = dev.seconds_ago;
-  state.cur = dev.currency || 'сум';
-  state.crop = dev.crop || 'Клубника';
-  $('title').textContent = 'Склад' + (dev.crop ? ' · ' + dev.crop : '');
-  const m = Math.floor(dev.seconds_ago / 60);
-  $('seen').textContent = m < 1 ? 'сейчас' : m < 60 ? m + ' мин' : Math.floor(m / 60) + ' ч';
-  const stale = dev.seconds_ago > 900;
-  $('dot').className = 'dot ' + (stale ? 'bad' : 'ok');
-  $('stale').hidden = !stale;
-  $('ops-stale').hidden = !stale;
-  if (stale) $('ops-stale').textContent = 'Моноблок сейчас не на связи. Приход, продажа и списание с сайта сохранятся сразу; исправления и отмены записей моноблока будут ждать склад, пока он не выйдет на связь.';
+  $('title').textContent = 'Склад' + (state.crop ? ' · ' + state.crop : '');
+  // Онлайн-режим: моноблок и сайт работают напрямую с облачной БД
+  $('seen').textContent = 'Онлайн';
+  $('dot').className = 'dot ok';
+  $('stale').hidden = true;
+  $('ops-stale').hidden = true;
 }
 
 async function refreshAll() {
