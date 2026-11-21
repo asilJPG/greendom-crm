@@ -343,3 +343,35 @@ test('удалённые документы видит только админ; 
   const dirInvAfter = await call(report, { query: { resource: 'investments' }, headers: { cookie: dirCookie } });
   assert.equal(dirInvAfter.body.items.some((x) => x.id === invRes.body.id && x.status === 'active'), true);
 });
+
+test('инвестиции по годам: неокупленный остаток переносится на следующий год', async () => {
+  // В 2024 году вложили 1 000 000, выручка 400 000, расходов 0 -> остаётся окупить 600 000 -> переходит на 2025 год
+  await db.query(`DELETE FROM investments WHERE EXTRACT(YEAR FROM doc_date)::int IN (2024, 2025)`);
+  await db.query(`DELETE FROM movements WHERE EXTRACT(YEAR FROM ts)::int IN (2024, 2025)`);
+  await db.query(`DELETE FROM expenses WHERE EXTRACT(YEAR FROM doc_date)::int IN (2024, 2025)`);
+
+  assert.equal((await fin('investments', 'POST', { doc_date: '2024-03-10', title: 'Теплица 2024', amount: 1000000 })).code, 200);
+  await db.query(
+    `INSERT INTO movements (device, id, ts, type, grade, gross_kg, tare_kg, net_kg, manual, amount, status)
+     VALUES ('web', 990001, '2024-06-15 12:00:00', 'out', 'Высший', 100, 0, 100, true, 400000, 'active')`
+  );
+
+  const r24 = await call(report, { query: { resource: 'investments', year: '2024' }, headers: { cookie } });
+  assert.equal(r24.code, 200);
+  assert.equal(r24.body.year, 2024);
+  assert.equal(r24.body.summary.carryover_in, 0);
+  assert.equal(r24.body.summary.year_invested, 1000000);
+  assert.equal(r24.body.summary.cumulative_profit, 400000);
+  assert.equal(r24.body.summary.payback_pct, 40);
+  assert.equal(r24.body.summary.remaining, 600000);
+
+  // В 2025 году новых вложений нет: перенос 600 000 становится суммой к окупаемости
+  const r25 = await call(report, { query: { resource: 'investments', year: '2025' }, headers: { cookie } });
+  assert.equal(r25.code, 200);
+  assert.equal(r25.body.year, 2025);
+  assert.equal(r25.body.summary.carryover_in, 600000);
+  assert.equal(r25.body.summary.year_invested, 0);
+  assert.equal(r25.body.summary.to_recover, 600000);
+  assert.equal(r25.body.summary.total_invested, 600000);
+  assert.equal(r25.body.summary.remaining, 600000);
+});

@@ -24,6 +24,7 @@ let deps = { me: () => null, cur: () => 'сум', toast: () => {}, askText: asyn
 let payMethod = 'transfer';
 let editingInvId = null;
 let invReqId = newRequestId(); // request_id формы нового вложения: один на форму, новый после успеха
+let selectedYear = String(new Date().getFullYear());
 const isAdmin = () => { const me = deps.me && deps.me(); return !!me && me.role === 'admin'; };
 
 function showSubView(mode) {
@@ -53,20 +54,57 @@ function openInvestmentForm(x = null) {
 export async function loadInvestments() {
   showSubView('list');
   $('inv-open-add').hidden = !isAdmin();
-  const r = await api('GET', '/api/report?resource=investments');
+  const qs = selectedYear && selectedYear !== 'all' ? `&year=${encodeURIComponent(selectedYear)}` : '';
+  const r = await api('GET', `/api/report?resource=investments${qs}`);
   if (!r.ok) return;
-  const { summary: s, by_investor = [], by_category = [], items = [] } = r.data;
+  const { year = 'all', years = [], summary: s, by_investor = [], by_category = [], items = [] } = r.data;
   const cur = deps.cur();
+  const isYear = typeof year === 'number';
   const pctClamped = Math.max(0, Math.min(100, s.payback_pct || 0));
+
+  // Чипы выбора года + «Всё время»
+  const chipsEl = $('inv-year-chips');
+  if (chipsEl) {
+    chipsEl.innerHTML = [
+      ...years.map((y) => `<button type="button" class="chip${String(year) === String(y) ? ' sel' : ''}" data-iy="${y}">${y} год</button>`),
+      `<button type="button" class="chip${year === 'all' ? ' sel' : ''}" data-iy="all">Всё время</button>`,
+    ].join('');
+    chipsEl.onclick = (e) => {
+      const b = e.target.closest('[data-iy]');
+      if (!b) return;
+      selectedYear = b.dataset.iy;
+      loadInvestments();
+    };
+  }
+
+  // Первая карточка: при переносе неокупленного остатка с прошлого года заголовок меняется на «Осталось окупить»
+  let k1Title = 'Всего вложено (CAPEX)';
+  let k1Sub = `документов: ${s.count}`;
+  if (isYear) {
+    if (s.carryover_in > 0) {
+      k1Title = 'Осталось окупить';
+      k1Sub = s.year_invested > 0
+        ? `перенос ${money(s.carryover_in)} + вложено в ${year}: ${money(s.year_invested)}`
+        : `перенесено с ${year - 1} г.`;
+    } else {
+      k1Title = `Вложено в ${year} г.`;
+      k1Sub = `документов: ${s.count}`;
+    }
+  }
+  const k2Title = isYear ? `Прибыль за ${year} г.` : 'Накопленная прибыль';
+  const k4Title = isYear ? `Остаток на конец ${year} г.` : 'Осталось окупить';
+  const k4Sub = s.remaining === 0 && s.to_recover > 0
+    ? 'Проект окупился'
+    : (isYear && s.remaining > 0 ? `перейдёт на ${year + 1} г.` : 'до выхода в чистый плюс');
 
   $('inv-kpis').innerHTML = `
     <div class="kpi">
-      <div class="k">Всего вложено (CAPEX)</div>
+      <div class="k">${k1Title}</div>
       <div class="v">${money(s.total_invested)} <small>${esc(cur)}</small></div>
-      <div class="subk">документов: ${s.count}</div>
+      <div class="subk">${k1Sub}</div>
     </div>
     <div class="kpi">
-      <div class="k">Накопленная прибыль</div>
+      <div class="k">${k2Title}</div>
       <div class="v" style="color:${s.cumulative_profit >= 0 ? 'var(--grn)' : 'var(--red)'}">${money(s.cumulative_profit)} <small>${esc(cur)}</small></div>
       <div class="subk">выручка − опер. расходы</div>
     </div>
@@ -76,9 +114,9 @@ export async function loadInvestments() {
       <div class="prog" style="max-width:none;margin-top:8px"><span style="width:${pctClamped}%;background:${pctClamped >= 100 ? 'var(--grn)' : 'var(--btn)'}"></span></div>
     </div>
     <div class="kpi">
-      <div class="k">Осталось окупить</div>
+      <div class="k">${k4Title}</div>
       <div class="v">${money(s.remaining)} <small>${esc(cur)}</small></div>
-      <div class="subk">${s.remaining === 0 && s.total_invested > 0 ? 'Проект окупился' : 'до выхода в чистый плюс'}</div>
+      <div class="subk">${k4Sub}</div>
     </div>`;
 
   const renderBreakdown = (list, keyField, emptyText) => list.length
