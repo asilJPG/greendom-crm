@@ -183,7 +183,7 @@ export function attachAutocomplete(input, getItems) {
   input.removeAttribute('list');
   input.setAttribute('autocomplete', 'off');
 
-  const render = () => {
+  const render = (isTyping = false) => {
     closeAc();
     const raw = (getItems() || [])
       .map((x) => (typeof x === 'string' ? { value: x, sub: '' } : x))
@@ -191,7 +191,8 @@ export function attachAutocomplete(input, getItems) {
     if (!raw.length) return;
 
     const q = (input.value || '').trim().toLowerCase();
-    const list = q
+    const exactMatch = !isTyping && q && raw.some((x) => x.value.toLowerCase() === q);
+    const list = q && !exactMatch
       ? raw.filter((x) => x.value.toLowerCase().includes(q) || (x.sub && x.sub.toLowerCase().includes(q)))
       : raw;
     if (!list.length) return;
@@ -204,7 +205,9 @@ export function attachAutocomplete(input, getItems) {
         ${it.sub ? `<span class="ac-sub">${esc(it.sub)}</span>` : ''}
       </button>`).join('');
 
-    document.body.appendChild(pop);
+    // Внутри <dialog>.showModal() (top-layer) элемент из document.body оказывается под модалкой — монтируем внутрь самого dialog.
+    const host = input.closest('dialog[open]') || document.body;
+    host.appendChild(pop);
     activeAc = pop;
 
     const r = input.getBoundingClientRect();
@@ -220,6 +223,7 @@ export function attachAutocomplete(input, getItems) {
       pop.style.maxHeight = `${Math.max(100, aboveH)}px`;
     }
 
+    pop.onmousedown = (e) => e.preventDefault();
     pop.onpointerdown = (e) => {
       const b = e.target.closest('[data-ai]');
       if (!b) return;
@@ -233,9 +237,9 @@ export function attachAutocomplete(input, getItems) {
     };
   };
 
-  input.addEventListener('focus', render);
-  input.addEventListener('click', render);
-  input.addEventListener('input', render);
-  input.addEventListener('blur', () => setTimeout(closeAc, 120));
+  input.addEventListener('focus', () => render(false));
+  input.addEventListener('click', () => render(false));
+  input.addEventListener('input', () => render(true));
+  input.addEventListener('blur', () => setTimeout(closeAc, 150));
   input.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAc(); });
 }
