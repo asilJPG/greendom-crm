@@ -512,3 +512,57 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
 .np-grid button.np-fn { background: #fff; font-size: 20px; font-weight: 600; color: var(--ink2); }
 .np-grid button.np-ok { grid-column: span 2; background: var(--btn); color: #fff; border-color: var(--btn); font-size: 18px; font-weight: 600; }
 .np-grid button.np-ok:active { opacity: .9; }
+
+/* ───── Мобильная адаптация (телефоны: нижняя панель, формы, таблицы, KPI) ───── */
+.mnav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 35;
+  display: flex; align-items: stretch; justify-content: space-around;
+  background: rgba(255, 255, 255, .96);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line);
+  padding: 6px 4px calc(6px + var(--sab));
+}
+.mnav-item {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 4px 2px; border: 0; background: transparent;
+  color: var(--mut); font-size: 11px; font-weight: 500; line-height: 1.1;
+  text-decoration: none;
+}
+.mnav-item svg { width: 21px; height: 21px; }
+.mnav-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mnav-item.sel { color: var(--ink); font-weight: 700; }
+
+@media (min-width: 1000px) {
+  .mnav { display: none; }
+}
+
+@media (max-width: 999px) {
+  main { padding-bottom: calc(84px + var(--sab)); }
+  .toast { bottom: calc(74px + var(--sab)); }
+}
+
+@media (max-width: 580px) {
+  main { padding: 14px 12px calc(84px + var(--sab)); }
+  h1.page { font-size: 22px; }
+  .card { padding: 14px; }
+  .hero { padding: 16px; }
+  .hero .num { font-size: 32px; }
+  .daterow { grid-template-columns: 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+  .kpis, .kpis4 { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi { padding: 12px; }
+  .kpi .v { font-size: 19px; }
+  .page-head { gap: 10px; padding-bottom: 12px; margin-bottom: 14px; }
+  .page-head > .btn, .page-head > div:last-child { width: 100%; }
+  .page-head > div:last-child > .btn { flex: 1; }
+  .dlg-foot { flex-direction: column-reverse; align-items: stretch; }
+  .dlg-foot > div { width: 100%; margin-left: 0 !important; display: flex; gap: 8px; }
+  .dlg-foot > div > .btn { flex: 1; }
+  .inv-sheet { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .inv-tbl { min-width: 440px; }
+  .pnl-tbl th, .pnl-tbl td { padding: 9px 5px; font-size: 13px; }
+  .pnl-sub td:first-child { padding-left: 14px; }
+  .cp-top { gap: 8px; }
+  .dl-nums { grid-template-columns: 1fr 1fr; }
+  .dl-nums .row-act-btn { grid-column: span 2; width: 100%; }
+}

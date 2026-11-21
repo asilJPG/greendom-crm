@@ -181,6 +181,32 @@ function buildNav() {
       navigate(a.dataset.tab);
     };
   });
+
+  // Нижняя панель быстрого доступа для телефонов (1 тап большим пальцем)
+  const mnav = $('mnav');
+  if (mnav) {
+    const allowed = allowedRoutes();
+    const role = state.me?.role;
+    const preferred = role === 'keeper'
+      ? ['stock', 'intake', 'sale', 'writeoff']
+      : ['stock', 'expenses', 'report', 'counterparties'];
+    const picks = preferred.map((id) => allowed.find((r) => r[0] === id)).filter(Boolean);
+    const shortName = { counterparties: 'Контраг.', report: 'Отчёт' };
+    mnav.innerHTML =
+      picks.map(([id, path, name, ic]) =>
+        `<a class="mnav-item" href="${path}" data-tab="${id}"><svg><use href="#${ic}"/></svg><span>${esc(shortName[id] || name)}</span></a>`
+      ).join('') +
+      `<button type="button" class="mnav-item" id="mnav-more"><svg><use href="#i-menu"/></svg><span>Меню</span></button>`;
+    mnav.querySelectorAll('a[data-tab]').forEach((a) => {
+      a.onclick = (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        navigate(a.dataset.tab);
+      };
+    });
+    const moreBtn = $('mnav-more');
+    if (moreBtn) moreBtn.onclick = openDrawer;
+  }
 }
 
 function navigate(id, { push = true, replace = false } = {}) {
@@ -195,7 +221,7 @@ function navigate(id, { push = true, replace = false } = {}) {
   }
   document.title = `${label} · Склад`;
 
-  document.querySelectorAll('#nav .nav-item').forEach((a) => a.classList.toggle('sel', a.dataset.tab === ridTab));
+  document.querySelectorAll('#nav .nav-item, #mnav .mnav-item[data-tab]').forEach((a) => a.classList.toggle('sel', a.dataset.tab === ridTab));
   ROUTES.forEach(([key]) => { const el = $('p-' + key); if (el) el.hidden = key !== ridTab; });
   const isOp = ridTab === 'intake' || ridTab === 'sale' || ridTab === 'writeoff';
   $('ops-shell').hidden = !isOp;
