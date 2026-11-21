@@ -67,7 +67,7 @@ export async function loadRefs() {
       <div class="l">
         <div class="t" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span>${esc(c.name)}</span>
-          ${c.active ? '' : '<span class="badge b-off">Скрыт</span>'}
+          ${c.active ? '' : '<span class="badge b-off">Удалён</span>'}
         </div>
         ${c.phone || c.note ? `<div class="s">${[c.phone, c.note].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
       </div>
@@ -82,8 +82,8 @@ export async function loadRefs() {
       openEntityModal({
         title: 'Редактировать покупателя',
         active: !!c.active,
-        archiveLabel: 'Скрыть из списка',
-        restoreLabel: 'Вернуть в список',
+        archiveLabel: 'Удалить',
+        restoreLabel: 'Восстановить',
         fields: [
           { key: 'name', label: 'Название или имя', value: c.name, required: true },
           { key: 'phone', label: 'Телефон', value: c.phone || '', placeholder: '+998…' },
@@ -100,7 +100,7 @@ export async function loadRefs() {
         onToggleActive: async (nextActive) => {
           const r2 = await api('PATCH', '/api/status?resource=refs', { target: 'customer', id: c.id, active: nextActive });
           if (!r2.ok) return errMsg(r2);
-          deps.toast(nextActive ? 'Покупатель возвращён' : 'Покупатель скрыт');
+          deps.toast(nextActive ? 'Покупатель восстановлен' : 'Покупатель удалён');
           await loadRefs();
           deps.onRefsChanged();
           return true;

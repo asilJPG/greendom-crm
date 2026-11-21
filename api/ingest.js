@@ -167,10 +167,15 @@ module.exports = async (req, res) => {
               cancel_reason=EXCLUDED.cancel_reason, cancelled_ts=EXCLUDED.cancelled_ts, updated_at=now()`,
         [device, JSON.stringify(rows)]
       );
-      // Автоматически пополняем справочник покупателей из поступивших продаж
+      // Автоматически пополняем справочник покупателей из поступивших продаж (не дублируем существующих и удалённых)
       const names = [...new Set(rows.map((r) => (r.customer || '').trim()).filter(Boolean))];
       if (names.length) {
-        await query(`INSERT INTO customers(name) SELECT DISTINCT unnest($1::text[]) ON CONFLICT DO NOTHING`, [names]);
+        await query(
+          `INSERT INTO customers(name)
+           SELECT DISTINCT trim(x) FROM unnest($1::text[]) AS x
+           WHERE trim(x) <> '' AND NOT EXISTS (SELECT 1 FROM customers c WHERE lower(c.name) = lower(trim(x)))`,
+          [names]
+        );
       }
     }
     await query(

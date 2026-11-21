@@ -186,20 +186,44 @@ test('сбой журнала при правке/отмене: документ
   assert.equal(await count(`SELECT count(*)::int AS n FROM audit_log WHERE action='payment_cancel'`), 1);
 });
 
-test('архивный контрагент возвращается атомарно; повтор request_id — duplicate', async () => {
+test('удаление и восстановление контрагента как в iiko: можно создать с тем же именем, восстановление при конфликте — 409', async () => {
   const c = await one(`SELECT id FROM customers WHERE name='Атом-покупатель'`);
-  await db.query(`UPDATE customers SET active=false WHERE id=$1`, [c.id]);
-  await crashOn('customer_restore');
-  assert.equal((await refs('POST', { request_id: 'restore-1', target: 'customer', name: 'Атом-покупатель' })).code, 500);
+  // 1. Удаляем старого контрагента (active=false)
+  const del = await refs('PATCH', { target: 'customer', id: c.id, active: false });
+  assert.equal(del.code, 200, JSON.stringify(del.body));
   assert.equal((await one(`SELECT active FROM customers WHERE id=$1`, [c.id])).active, false);
-  assert.equal(await keyExists('customer:restore-1'), false);
+
+  // 2. Можно создать нового активного контрагента с тем же названием (атомарно + идемпотентность request_id)
+  await crashOn('customer_add');
+  assert.equal((await refs('POST', { request_id: 'same-name-1', target: 'customer', name: 'Атом-покупатель' })).code, 500);
+  assert.equal(await keyExists('customer:same-name-1'), false);
   await noCrash();
-  const ok = await refs('POST', { request_id: 'restore-1', target: 'customer', name: 'Атом-покупатель' });
-  assert.equal(ok.code, 200, JSON.stringify(ok.body));
-  assert.equal(ok.body.customer.active, true);
-  assert.deepEqual((await refs('POST', { request_id: 'restore-1', target: 'customer', name: 'Атом-покупатель' })).body, { ok: true, duplicate: true, id: c.id });
-  assert.equal((await refs('POST', { request_id: 'restore-2', target: 'customer', name: 'Атом-покупатель' })).code, 409, 'активный — уже есть');
-  assert.equal(await keyExists('customer:restore-2'), false, 'отказ не занимает ключ');
+  const created = await refs('POST', { request_id: 'same-name-1', target: 'customer', name: 'Атом-покупатель' });
+  assert.equal(created.code, 200, JSON.stringify(created.body));
+  assert.notEqual(created.body.customer.id, c.id, 'создана новая запись с тем же названием');
+  assert.equal(created.body.customer.active, true);
+  assert.deepEqual(
+    (await refs('POST', { request_id: 'same-name-1', target: 'customer', name: 'Атом-покупатель' })).body,
+    { ok: true, duplicate: true, id: created.body.customer.id }
+  );
+  // Второй активный с тем же именем — 409
+  assert.equal((await refs('POST', { request_id: 'same-name-2', target: 'customer', name: 'Атом-покупатель' })).code, 409);
+  assert.equal(await keyExists('customer:same-name-2'), false, 'отказ не занимает ключ');
+
+  // 3. Попытка восстановить удалённого при наличии действующего с тем же именем — 409
+  const conflict = await refs('PATCH', { target: 'customer', id: c.id, active: true });
+  assert.equal(conflict.code, 409, JSON.stringify(conflict.body));
+  assert.match(conflict.body.error, /уже существует/i);
+
+  // 4. Удаляем нового — теперь старого можно восстановить (атомарно)
+  assert.equal((await refs('PATCH', { target: 'customer', id: created.body.customer.id, active: false })).code, 200);
+  await crashOn('customer_restore');
+  assert.equal((await refs('PATCH', { target: 'customer', id: c.id, active: true })).code, 500);
+  assert.equal((await one(`SELECT active FROM customers WHERE id=$1`, [c.id])).active, false);
+  await noCrash();
+  const restored = await refs('PATCH', { target: 'customer', id: c.id, active: true });
+  assert.equal(restored.code, 200, JSON.stringify(restored.body));
+  assert.equal((await one(`SELECT active FROM customers WHERE id=$1`, [c.id])).active, true);
 });
 
 // ───────── приёмник: проверка значений ─────────

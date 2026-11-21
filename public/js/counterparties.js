@@ -82,8 +82,14 @@ function renderList() {
       <div class="subk">контрагентов: ${activeRows.filter((r) => r.balance < 0).length}</div>
     </div>`;
 
+  const hasHistory = (c) => (c.sales_total || 0) > 0 || (c.expenses_total || 0) > 0 || (c.paid_in || 0) > 0 || (c.paid_out || 0) > 0;
   const filtered = rows.filter((c) => {
-    if (kindFilter) {
+    if (kindFilter === 'deleted') {
+      if (c.active) return false;
+    } else {
+      // Как в iiko: удалённый контрагент остаётся серым в списке только если по нему были операции в прошлых периодах;
+      // без операций его можно найти и восстановить во вкладке «Удалённые».
+      if (!c.active && !hasHistory(c)) return false;
       if (kindFilter === 'buyer' && c.kind !== 'buyer' && c.kind !== 'both') return false;
       if (kindFilter === 'supplier' && c.kind !== 'supplier' && c.kind !== 'both') return false;
       if (kindFilter === 'employee' && c.kind !== 'employee') return false;
@@ -101,7 +107,7 @@ function renderList() {
       c.contact_person ? esc(c.contact_person) : '',
       c.phone ? esc(c.phone) : '',
       c.inn ? `ИНН ${esc(c.inn)}` : '',
-      c.active ? '' : '<span class="badge b-off">Скрыт</span>',
+      c.active ? '' : '<span class="badge b-off">Удалён</span>',
     ].filter(Boolean).join(' · ');
     const stats = [
       c.sales_total ? `продажи: ${money(c.sales_total)}` : '',
@@ -188,7 +194,7 @@ function openCpDetail(c = null, tab = 'rec') {
   const tog = $('cp-f-toggle');
   tog.hidden = !c || !isAdmin();
   if (c) {
-    tog.textContent = c.active ? 'Скрыть контрагента' : 'Вернуть в список';
+    tog.textContent = c.active ? 'Удалить контрагента' : 'Восстановить';
     tog.className = c.active ? 'btn ghost danger' : 'btn ghost';
   }
 
@@ -432,8 +438,13 @@ export function initCounterparties(config) {
     b.disabled = true;
     try {
       const r = await api('PATCH', '/api/status?resource=refs', { target: 'customer', id: currentCp.id, active: !currentCp.active });
-      if (!r.ok) { $('cp-f-err').textContent = errMsg(r); return; }
-      deps.toast(currentCp.active ? 'Контрагент скрыт' : 'Контрагент возвращён');
+      if (!r.ok) {
+        const msg = errMsg(r);
+        $('cp-f-err').textContent = msg;
+        deps.toast(msg, true);
+        return;
+      }
+      deps.toast(currentCp.active ? 'Контрагент удалён' : 'Контрагент восстановлен');
       await deps.onRefsChanged();
       await loadCounterparties();
     } finally {
