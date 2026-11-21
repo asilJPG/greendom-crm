@@ -3,14 +3,15 @@
    с тонкой рамкой rgba(0,0,0,.08), чёрные кнопки #1b1b1b, блоки «метка / число / подпись». */
 :root {
   color-scheme: light;
-  --bg: #ffffff;
-  --shell: #f1f1f1;
-  --topbar: #f1f1f1;
+  --bg: #f5f5f7;
+  --shell: #ededf0;
+  --topbar: #ffffff;
   --ink: #000000;
   --ink2: #474747;
   --mut: #6b6b70;
-  --line: rgba(0, 0, 0, .08);
-  --line2: #ccd3db;
+  --line: rgba(0, 0, 0, .10);
+  --line2: #c5ccd4;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, .05), 0 4px 12px rgba(0, 0, 0, .04);
   --soft: rgba(0, 0, 0, .04);
   --soft2: rgba(0, 0, 0, .06);
   --btn: #1b1b1b;
@@ -212,7 +213,7 @@ main { padding: 20px 16px calc(40px + var(--sab)); max-width: 920px; margin: 0 a
 .banner.red { background: var(--red-bg); color: var(--red); }
 
 /* ───── карточки и блоки ───── */
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; margin-bottom: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow-card); }
 .card h2 { margin: 0 0 14px; font-size: 16px; letter-spacing: -.01em; color: var(--ink); font-weight: 700; }
 
 details.scale-card { padding: 14px 18px; }
@@ -220,13 +221,13 @@ details.scale-card summary { list-style: none; display: flex; align-items: cente
 details.scale-card summary::-webkit-details-marker { display: none; }
 details.scale-card[open] summary { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 
-.hero { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; margin-bottom: 14px; }
+.hero { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; margin-bottom: 14px; box-shadow: var(--shadow-card); }
 .hero .lbl { font-size: 13.5px; color: var(--ink2); font-weight: 500; }
 .hero .num { font-size: 36px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; margin-top: 6px; font-variant-numeric: tabular-nums; color: var(--ink); }
 .hero .num small { font-size: 18px; font-weight: 500; color: var(--mut); margin-left: 6px; letter-spacing: 0; }
 
 .gcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
-.gcard { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; }
+.gcard { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; box-shadow: var(--shadow-card); }
 .gcard .nm { font-size: 13.5px; color: var(--ink2); font-weight: 500; display: flex; align-items: center; gap: 7px; }
 .gcard .bal { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; margin: 6px 0 12px; color: var(--ink); }
 .gcard .bal small { font-size: 14px; color: var(--mut); font-weight: 500; }
@@ -234,7 +235,7 @@ details.scale-card[open] summary { margin-bottom: 12px; padding-bottom: 10px; bo
 .gcard .mini b { display: block; font-size: 13px; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 1px; }
 
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
-.kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 15px 16px; }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 15px 16px; box-shadow: var(--shadow-card); }
 .kpi .k { font-size: 13px; color: var(--ink2); font-weight: 500; }
 .kpi .v { font-size: 24px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 5px; color: var(--ink); }
 .kpi .v small { font-size: 13px; color: var(--mut); font-weight: 500; }
@@ -367,7 +368,7 @@ dialog#inv-dlg { width: min(640px, 100%); }
   .ops-wrap { grid-template-columns: 330px 1fr; }
   .scale-col { position: sticky; top: 68px; }
 }
-.scale-panel { background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 18px; }
+.scale-panel { background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 18px; box-shadow: var(--shadow-card); }
 .sc-cap { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); }
 .sc-digits { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 52px; font-weight: 700; letter-spacing: -.03em; line-height: 1.08; margin: 10px 0 4px; font-variant-numeric: tabular-nums; color: #b5b5ba; transition: color .15s; }
 .sc-digits small { font-size: 20px; font-weight: 500; margin-left: 6px; color: var(--mut); letter-spacing: 0; }
@@ -413,7 +414,7 @@ dialog#inv-dlg { width: min(640px, 100%); }
 dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
 
 /* ───── Контрагенты и взаиморасчёты ───── */
-.cp-card { background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; }
+.cp-card { background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; box-shadow: var(--shadow-card); }
 .cp-card.off { opacity: .62; }
 .cp-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .cp-name { font-size: 16px; font-weight: 700; color: var(--ink); }
