@@ -559,7 +559,10 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
   .dlg-foot > div { width: 100%; margin-left: 0 !important; display: flex; gap: 8px; }
   .dlg-foot > div > .btn { flex: 1; }
   .inv-sheet { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .inv-tbl { min-width: 440px; }
+  .inv-tbl { width: 100%; font-size: 12.5px; }
+  .inv-tbl th, .inv-tbl td { padding: 7px 4px; }
+  .inv-title { font-size: 17px; }
+  .inv-brand { display: none; }
   .pnl-tbl th, .pnl-tbl td { padding: 9px 5px; font-size: 13px; }
   .pnl-sub td:first-child { padding-left: 14px; }
   .cp-top { gap: 8px; }
