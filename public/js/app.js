@@ -275,8 +275,6 @@ function paintStatus(d) {
   // Онлайн-режим: моноблок и сайт работают напрямую с облачной БД
   $('seen').textContent = 'Онлайн';
   $('dot').className = 'dot ok';
-  $('stale').hidden = true;
-  $('ops-stale').hidden = true;
 }
 
 async function refreshAll() {

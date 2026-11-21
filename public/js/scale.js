@@ -132,8 +132,62 @@ function waitBuf(sess, pred, ms) {
   });
 }
 
+// Парсинг потоковых ASCII-строк для других весов (CAS ER/SW/CI, китайские весы, Mettler и т.д.),
+// которые сами шлют вес по RS-232 строками вида "ST,GS,+  1.250kg", "US,NT, 0.500 kg", " 1.250 kg", "=052.100".
+function tryParseStreamLine(line, sess) {
+  const s = line.trim();
+  if (!s) return false;
+  // CAS AD кадр обрабатывается отдельно в pollOnce
+  if (s.includes('\x01') || s.includes('\x02')) return false;
+
+  // Формат с реверсом цифр (некоторые китайские весы шлют "=052.100" -> 1.250)
+  const rev = /^=(\d+\.\d+)$/.exec(s);
+  if (rev) {
+    const val = parseFloat(rev[1].split('').reverse().join(''));
+    if (Number.isFinite(val)) {
+      updateStreamWeight(val, null, sess);
+      return true;
+    }
+  }
+
+  // Стандартный ASCII-формат: [ST|US|S|U] ... [+-]? 12.345 [kg|g]?
+  const m = /(?:^|[^A-Z])(ST|US|OL)?[^0-9+-]*([+-]?)\s*(\d+(?:\.\d+)?)\s*(kg|g|кг|г)?/i.exec(s);
+  if (!m) return false;
+  if (m[1] && m[1].toUpperCase() === 'OL') return false;
+  let val = parseFloat(m[3]);
+  if (!Number.isFinite(val)) return false;
+  if (m[2] === '-') val = -val;
+  if (m[4] && /^(g|г)$/i.test(m[4])) val = val / 1000;
+  const flagStable = m[1] ? m[1].toUpperCase() === 'ST' : null;
+  updateStreamWeight(val, flagStable, sess);
+  return true;
+}
+
+function updateStreamWeight(val, flagStable, sess) {
+  const now = Date.now();
+  sess.lastStreamAt = now;
+  state.online = true;
+  state.gross = val;
+  if (flagStable !== null) {
+    state.stable = flagStable;
+  } else {
+    // Если весы не присылают флаг ST/US — считаем вес устоявшимся, если он не меняется 1.2 сек
+    if (Math.abs(val - (sess.lastVal ?? NaN)) <= 0.015) {
+      if (!sess.stableSince) sess.stableSince = now;
+      state.stable = now - sess.stableSince >= 1200;
+    } else {
+      sess.stableSince = now;
+      state.stable = false;
+    }
+    sess.lastVal = val;
+  }
+  renderDisplay();
+}
+
 async function pollOnce(sess) {
   if (sess.closing || sess.polling || SC.sess !== sess) return;
+  // Если весы сами шлют поток (stream), не мешаем им опросом ENQ/DC1
+  if (sess.lastStreamAt && Date.now() - sess.lastStreamAt < 2500) return;
   sess.polling = true;
   try {
     sess.buf.length = 0;
@@ -219,6 +273,10 @@ async function openPort(port) {
     reader: port.readable.getReader(),
     writer: port.writable.getWriter(),
     buf: [],
+    lineBuf: '',
+    lastStreamAt: 0,
+    lastVal: null,
+    stableSince: 0,
     pollTimer: null,
     polling: false,
     closing: false,
@@ -230,7 +288,21 @@ async function openPort(port) {
       for (;;) {
         const { value, done } = await sess.reader.read();
         if (done) break;
-        if (value) sess.buf.push(...value);
+        if (value) {
+          sess.buf.push(...value);
+          // Параллельно проверяем текстовые строки для потоковых весов
+          for (const b of value) {
+            if (b === 0x0a || b === 0x0d) {
+              if (sess.lineBuf) {
+                tryParseStreamLine(sess.lineBuf, sess);
+                sess.lineBuf = '';
+              }
+            } else if (b >= 0x20 && b <= 0x7e) {
+              sess.lineBuf += String.fromCharCode(b);
+              if (sess.lineBuf.length > 120) sess.lineBuf = sess.lineBuf.slice(-120);
+            }
+          }
+        }
       }
     } catch {
       // ошибка чтения: обычно USB выдернули
