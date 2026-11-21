@@ -450,7 +450,6 @@
 
         <div class="seg" id="cp-detail-tabs" style="margin-top:12px">
           <button class="sel" data-cpt="rec">Акт сверки</button>
-          <button data-cpt="pay">+ Провести оплату</button>
           <button data-cpt="crm">Карточка (CRM)</button>
         </div>
 
@@ -464,36 +463,6 @@
             <div class="acts" style="justify-content:flex-end;margin-top:16px">
               <button class="btn sec" id="rec-png">Картинка PNG</button>
               <button class="btn" id="rec-print">Печать / PDF</button>
-            </div>
-          </div>
-        </div>
-
-        <div id="cp-tab-pay" hidden>
-          <div class="card stack">
-            <h2 style="margin:0">Провести оплату</h2>
-            <div>
-              <label class="f">Направление платежа</label>
-              <div class="chips" id="pay-dir-chips">
-                <button class="chip sel" type="button" data-dir="in">Оплата от контрагента (нам)</button>
-                <button class="chip" type="button" data-dir="out">Выплата контрагенту (мы)</button>
-              </div>
-            </div>
-            <div class="daterow">
-              <div><label class="f" for="pay-date">Дата платежа</label><input id="pay-date" type="date"></div>
-              <div><label class="f" for="pay-amt">Сумма</label><input id="pay-amt" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div>
-            </div>
-            <div>
-              <label class="f">Способ оплаты</label>
-              <div class="chips" id="pay-pm-chips">
-                <button class="chip sel" type="button" data-pm="cash">Наличные</button>
-                <button class="chip" type="button" data-pm="card">Карта</button>
-                <button class="chip" type="button" data-pm="transfer">Перечисление</button>
-              </div>
-            </div>
-            <div><label class="f" for="pay-comment">Комментарий / № платёжки</label><input id="pay-comment" placeholder="За какую накладную, номер платёжного поручения…"></div>
-            <div class="err" id="pay-err"></div>
-            <div class="dlg-foot">
-              <button class="btn" id="pay-save" style="margin-left:auto">Провести оплату</button>
             </div>
           </div>
         </div>

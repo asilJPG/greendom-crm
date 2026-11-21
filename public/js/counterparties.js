@@ -153,11 +153,10 @@ export async function loadCounterparties(keepCpId = null) {
 
 /* ───── Полноценная страница карточки контрагента ───── */
 function switchDetailTab(tab) {
-  if (tab === 'pay' && !isAdmin()) tab = 'rec';
+  if (tab !== 'crm') tab = 'rec';
   detailTab = tab;
   document.querySelectorAll('#cp-detail-tabs button').forEach((b) => b.classList.toggle('sel', b.dataset.cpt === tab));
   $('cp-tab-rec').hidden = tab !== 'rec';
-  $('cp-tab-pay').hidden = tab !== 'pay';
   $('cp-tab-crm').hidden = tab !== 'crm';
   if (tab === 'rec' && currentCp) fetchReconcile();
 }
@@ -193,17 +192,7 @@ function openCpDetail(c = null, tab = 'rec') {
     tog.className = c.active ? 'btn ghost danger' : 'btn ghost';
   }
 
-  // Настраиваем форму оплаты
   if (c) {
-    payDir = c.kind === 'supplier' || c.kind === 'employee' || c.balance < 0 ? 'out' : 'in';
-    payMethod = 'cash';
-    $('pay-date').value = iso(new Date());
-    $('pay-amt').value = c.balance !== 0 ? String(Math.abs(c.balance)) : '';
-    $('pay-comment').value = '';
-    $('pay-err').textContent = '';
-    document.querySelectorAll('#pay-dir-chips .chip').forEach((ch) => ch.classList.toggle('sel', ch.dataset.dir === payDir));
-    document.querySelectorAll('#pay-pm-chips .chip').forEach((ch) => ch.classList.toggle('sel', ch.dataset.pm === payMethod));
-
     const today = iso(new Date());
     if (!$('rec-from').value) {
       $('rec-from').value = today.slice(0, 8) + '01';
@@ -478,48 +467,6 @@ export function initCounterparties(config) {
       deps.toast(currentCp ? 'Карточка сохранена' : r.data && r.data.duplicate ? 'Контрагент уже был добавлен' : 'Контрагент добавлен');
       await deps.onRefsChanged();
       await loadCounterparties(currentCp ? currentCp.id : r.data.customer?.id);
-    } finally {
-      b.disabled = false;
-    }
-  };
-
-  // Проведение оплаты
-  $('pay-dir-chips').onclick = (e) => {
-    const b = e.target.closest('[data-dir]');
-    if (!b) return;
-    payDir = b.dataset.dir;
-    document.querySelectorAll('#pay-dir-chips .chip').forEach((c) => c.classList.toggle('sel', c === b));
-  };
-  $('pay-pm-chips').onclick = (e) => {
-    const b = e.target.closest('[data-pm]');
-    if (!b) return;
-    payMethod = b.dataset.pm;
-    document.querySelectorAll('#pay-pm-chips .chip').forEach((c) => c.classList.toggle('sel', c === b));
-  };
-  $('pay-save').onclick = async () => {
-    if (!currentCp) return;
-    const b = $('pay-save');
-    if (b.disabled) return;
-    if (!isAdmin()) { $('pay-err').textContent = 'Проводить оплаты может только администратор'; return; }
-    const amt = readDecimal('pay-amt', { label: 'Сумма', positive: true, max: 1e13 });
-    if (!amt.ok) { $('pay-err').textContent = amt.error; $('pay-amt').focus(); return; }
-    $('pay-err').textContent = '';
-    b.disabled = true;
-    try {
-      const r = await api('POST', '/api/report?resource=payments', {
-        doc_date: $('pay-date').value,
-        counterparty: currentCp.name,
-        direction: payDir,
-        amount: round2(amt.value),
-        payment_method: payMethod,
-        comment: $('pay-comment').value,
-        request_id: payReqId,
-      });
-      if (!r.ok) { $('pay-err').textContent = errMsg(r); return; }
-      payReqId = newRequestId();
-      deps.toast(r.data && r.data.duplicate ? 'Эта оплата уже была проведена' : 'Оплата проведена');
-      detailTab = 'rec';
-      await loadCounterparties(currentCp.id);
     } finally {
       b.disabled = false;
     }
