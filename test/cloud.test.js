@@ -10,13 +10,15 @@ process.env.SESSION_SECRET = 'session-secret-for-tests-0123456789';
 process.env.SETUP_KEY = 'setup-key-for-tests-0123456789abcdef';
 
 const pg = new PGlite();
-globalThis.__TEST_DB = { query: async (text, params) => (await pg.query(text, params)).rows };
+globalThis.__TEST_DB = {
+  query: async (text, params) => (await pg.query(text, params)).rows,
+  transaction: async (list) => pg.transaction(async (tx) => { const out = []; for (const [t, p] of list) out.push((await tx.query(t, p || [])).rows); return out; }),
+};
 
 const ingest = require('../api/ingest');
 const login = require('../api/login');
 const logout = require('../api/logout');
 const setup = require('../api/setup');
-const password = require('../api/password');
 const users = require('../api/users');
 const stock = require('../api/stock');
 const report = require('../api/report');
@@ -82,7 +84,7 @@ test('setup: создаёт первого админа один раз, пов�
   assert.equal(n, 1);
 });
 
-test('пароль в базе хранится хэшем и шифром, а не открытым текстом; админ видит пароль в /api/users', async () => {
+test('пароль в базе хранится хэшем и шифром, а не открытым текстом; пароль администратора в /api/users не показывается', async () => {
   const [u] = await globalThis.__TEST_DB.query('SELECT pass_hash, pass_enc FROM app_users');
   assert.match(u.pass_hash, /^scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}$/);
   assert.ok(!u.pass_hash.includes(OWNER_PW));
@@ -91,7 +93,7 @@ test('пароль в базе хранится хэшем и шифром, а �
   const { cookie: admin } = await signIn(OWNER_PW);
   const list = await call(users, as(admin));
   assert.equal(list.code, 200);
-  assert.equal(list.body[0].password, OWNER_PW);
+  assert.equal(list.body[0].password, null, 'пароль админа не отдаётся');
 });
 
 // ───────── приёмник (ключ моноблока) ─────────
@@ -146,7 +148,7 @@ test('остатки, отчёт, история считаются верно',
   assert.equal(by['Высший'].balance_kg, 70);
   assert.equal(by['Первый'].balance_kg, 45);
   assert.equal(st.body.total_kg, 115);
-  assert.deepEqual(st.body.rows.map((x) => x.grade), ['Высший', 'Первый', 'Второй', 'Брак']);
+  assert.deepEqual(st.body.rows.map((x) => x.grade), ['Высший', 'Первый', 'Второй']);
   const rep = await call(report, { query: { from: today, to: today }, ...as(cookie) });
   const g = Object.fromEntries(rep.body.by_grade.map((x) => [x.grade, x]));
   assert.equal(g['Высший'].amount, 600000);
@@ -189,18 +191,16 @@ test('админ создаёт пользователя; одинаковые �
   assert.ok(st.body.devices.length >= 1, 'данные склада отдаются сразу');
 });
 
-test('смена пароля: правила (в т.ч. чужой пароль), старая сессия отзывается', async () => {
+test('самостоятельной смены пароля нет; пароль меняет только администратор, старая сессия отзывается', async () => {
+  assert.ok(!require('fs').existsSync(require('path').join(__dirname, '../api/password.js')), '/api/password удалён');
   const v = await signIn('viewerpass1');
-  const chg = (body) => call(password, { method: 'POST', body, ...as(v.cookie) });
-  assert.equal((await chg({ old_password: 'viewerpass1', new_password: 'short' })).code, 400, 'короче 8');
-  assert.equal((await chg({ old_password: 'viewerpass1', new_password: 'viewerpass1' })).code, 400, 'тот же пароль');
-  assert.equal((await chg({ old_password: 'WRONG-old-pass', new_password: 'brand-new-pass-1' })).code, 400, 'неверный текущий');
-  assert.equal((await chg({ old_password: 'viewerpass1', new_password: OWNER_PW })).code, 409, 'нельзя взять пароль администратора');
-  const ok = await chg({ old_password: 'viewerpass1', new_password: 'brand-new-pass-1' });
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const bakh = (await call(users, as(admin))).body.find((u) => u.name === 'Бахтиёр');
+  const ok = await call(users, { method: 'PATCH', body: { id: bakh.id, password: 'brand-new-pass-1' }, ...as(admin) });
   assert.equal(ok.code, 200);
   assert.equal((await call(stock, as(v.cookie))).code, 401, 'старая cookie отозвана');
-  assert.equal((await call(stock, as(cookieOf(ok)))).code, 200, 'новая cookie работает');
   assert.equal((await call(login, { method: 'POST', body: { password: 'viewerpass1' } })).code, 401, 'старый пароль не подходит');
+  assert.equal((await signIn('brand-new-pass-1')).body.must_change, false);
 });
 
 test('роль «просмотр» не может управлять пользователями и читать журнал', async () => {
@@ -251,8 +251,7 @@ test('второго админа можно создать, тогда перв
   assert.equal((await call(login, { method: 'POST', body: { password: OWNER_PW } })).code, 401, 'отключённый админ не входит');
   const second = await signIn('secondadmin1');
   assert.equal(second.body.role, 'admin');
-  const ch = await call(password, { method: 'POST', body: { old_password: 'secondadmin1', new_password: 'second-admin-ok-1' }, ...as(second.cookie) });
-  assert.equal((await call(users, { method: 'PATCH', body: { id: first.id, active: true }, ...as(cookieOf(ch)) })).code, 200);
+  assert.equal((await call(users, { method: 'PATCH', body: { id: first.id, active: true }, ...as(second.cookie) })).code, 200);
 });
 
 test('журнал: пишет входы, неудачи и действия, доступен только админу, пароли не попадают', async () => {
@@ -260,7 +259,7 @@ test('журнал: пишет входы, неудачи и действия, �
   const log = await call(users, { query: { log: '1' }, ...as(cookie) });
   assert.equal(log.code, 200);
   const actions = new Set(log.body.map((a) => a.action));
-  for (const a of ['setup', 'login', 'login_fail', 'user_add', 'user_edit', 'password_change']) assert.ok(actions.has(a), `нет записи ${a}`);
+  for (const a of ['setup', 'login', 'login_fail', 'user_add', 'user_edit']) assert.ok(actions.has(a), `нет записи ${a}`);
   const text = JSON.stringify(log.body);
   for (const secret of [OWNER_PW, 'viewerpass1', 'brand-new-pass', 'reset-by-admin', 'secondadmin1']) assert.ok(!text.includes(secret), `пароль ${secret} в журнале`);
 });
@@ -295,14 +294,12 @@ test('роли: складовщик создаётся и видит данны
   await globalThis.__TEST_DB.query('DELETE FROM login_fails'); // предыдущие проверки подбора заполнили общий предел
   const { cookie: admin } = await signIn(OWNER_PW);
   const add = (body) => call(users, { method: 'POST', body, ...as(admin) });
-  assert.equal((await add({ name: 'Складовщик Анвар', password: 'keeper-pass-1', role: 'keeper' })).code, 200);
+  assert.equal((await add({ name: 'Складовщик Анвар', password: 'keeper-new-pass-1', role: 'keeper' })).code, 200);
   assert.equal((await add({ name: 'Хакер роли', password: 'hacker-pass-1', role: 'viewer' })).body && (await call(users, as(admin))).body.find((u) => u.name === 'Хакер роли').role, 'director', 'неизвестная роль при создании = директор, а не повышение');
-  const k = await signIn('keeper-pass-1');
+  const k = await signIn('keeper-new-pass-1');
   assert.equal(k.body.role, 'keeper');
-  const chg = await call(password, { method: 'POST', body: { old_password: 'keeper-pass-1', new_password: 'keeper-new-pass-1' }, ...as(k.cookie) });
-  assert.equal(chg.code, 200);
-  assert.equal((await call(stock, as(cookieOf(chg)))).code, 200);
-  assert.equal((await call(users, as(cookieOf(chg)))).code, 403, 'складовщик не управляет пользователями');
+  assert.equal((await call(stock, as(k.cookie))).code, 200);
+  assert.equal((await call(users, as(k.cookie))).code, 403, 'складовщик не управляет пользователями');
   // миграция: старая база с ролью viewer
   const db = globalThis.__TEST_DB;
   await db.query(`ALTER TABLE app_users DROP CONSTRAINT app_users_role_check`);
@@ -320,9 +317,7 @@ test('операции с сайта: мгновенное применение,
   await db.query('DELETE FROM login_fails');
   const { cookie: admin } = await signIn(OWNER_PW);
   const adm = as(admin);
-  assert.equal((await call(users, { method: 'POST', body: { name: 'Директор Тест', password: 'director-pass-1', role: 'director' }, ...adm })).code, 200);
-  const dir = await signIn('director-pass-1');
-  await call(password, { method: 'POST', body: { old_password: 'director-pass-1', new_password: 'director-pass-2' }, ...as(dir.cookie) });
+  assert.equal((await call(users, { method: 'POST', body: { name: 'Директор Тест', password: 'director-pass-2', role: 'director' }, ...adm })).code, 200);
   const dirCookie = cookieOf((await call(login, { method: 'POST', body: { password: 'director-pass-2' } })));
   const keeper = cookieOf(await call(login, { method: 'POST', body: { password: 'keeper-new-pass-1' } }));
   const P = { grade: 'Высший', net_kg: 12.5, worker: 'Мадина' };
@@ -356,60 +351,68 @@ test('операции с сайта: мгновенное применение,
   const after = (await call(stock, adm)).body.rows.find((r) => r.grade === 'Высший').balance_kg;
   assert.equal(Math.round((after - before) * 1000) / 1000, 9.5, 'остаток на сайте обновился сразу (+12.5 - 3)');
 
-  // исправление записи моноблока: сразу меняет movements в облаке И ставит pending-команду для point-1
+  // исправление записи АКТИВНОГО моноблока: в облаке не применяется, а ставится pending-командой для point-1
+  // (решение за моноблоком: его остатки и правила; облако получит результат вместе с его записями)
   const adminEdit = await post(admin, 'edit', { id: 1, device: 'point-1', reason: 'ошибка весов', net_kg: 90 });
   assert.equal(adminEdit.code, 200);
   assert.equal(adminEdit.body.status, 'pending');
+  assert.ok(adminEdit.body.result, 'в ответе есть текст результата');
   const [m1] = await db.query(`SELECT net_kg, manual FROM movements WHERE device='point-1' AND id=1`);
-  assert.equal(m1.net_kg, 90, 'правка сразу видна в облачной БД');
-  assert.equal(m1.manual, true);
+  assert.equal(m1.net_kg, 100, 'облако не меняет запись моноблока до его ответа');
+  assert.equal((await post(admin, 'edit', { id: 1, reason: 'без устройства', net_kg: 80 })).code, 400, 'device обязателен');
+  assert.equal((await post(keeper, 'cancel_movement', { id: 2, device: 'point-1', reason: 'x' })).code, 403, 'складовщик не трогает записи моноблока');
 
   // моноблок забирает очередь; чужое устройство не видит и не закрывает чужую команду
   const dev = (b) => call(ingest, { method: 'POST', body: { device: 'point-1', crop: 'Клубника', currency: 'сум', grades: BATCH.grades, pending: 0, movements: [], ...b }, headers: AUTH });
   const other = await call(ingest, { method: 'POST', body: { device: 'other-device', acks: [{ id: adminEdit.body.id, status: 'applied', result: 'взлом' }], movements: [] }, headers: AUTH });
   assert.deepEqual(other.body.commands, [], 'другое устройство очередь не получает');
 
-  // защита от перезаписи: если моноблок прислал старую версию id=1 + новую офлайн-запись id=99 ДО ack,
-  // облачная правка id=1 сохраняется, а новая запись id=99 принимается!
+  // записи моноблока принимаются как есть (облако их не правило), новая офлайн-запись id=99 тоже
   const stalePush = await dev({
     movements: [
-      { ...BATCH.movements[0], net_kg: 10 }, // старая версия id=1
+      { ...BATCH.movements[0], net_kg: 100 },
       { id: 99, ts: '2026-11-17 14:00:00', type: 'in', grade: 'Первый', gross_kg: 5.2, tare_kg: 0.2, net_kg: 5.0, worker: 'Офлайн', status: 'active' },
     ],
   });
   assert.equal(stalePush.body.commands.length, 1);
   assert.equal(stalePush.body.commands[0].id, adminEdit.body.id);
-  const [m1Still] = await db.query(`SELECT net_kg FROM movements WHERE device='point-1' AND id=1`);
-  assert.equal(m1Still.net_kg, 90, 'старые данные моноблока не затёрли свежую правку сайта');
   const [m99] = await db.query(`SELECT net_kg FROM movements WHERE device='point-1' AND id=99`);
   assert.equal(m99.net_kg, 5, 'новая офлайн-запись моноблока сохранилась');
 
   // подтверждение от моноблока закрывает команду; повторный ответ не перезаписывает
   await dev({ acks: [{ id: adminEdit.body.id, status: 'hacked' }] });
   assert.equal((await dev({})).body.commands.length, 1, 'неверный статус ответа игнорируется');
-  await dev({ acks: [{ id: adminEdit.body.id, status: 'applied', result: 'запись #1 исправлена' }] });
+  await dev({ acks: [{ id: adminEdit.body.id, status: 'applied', result: 'запись #1 исправлена' }], movements: [{ ...BATCH.movements[0], net_kg: 90, manual: 1 }] });
   await dev({ acks: [{ id: adminEdit.body.id, status: 'rejected', result: 'позже' }] });
   assert.equal((await dev({})).body.commands.length, 0);
+  const [m1Synced] = await db.query(`SELECT net_kg FROM movements WHERE device='point-1' AND id=1`);
+  assert.equal(m1Synced.net_kg, 90, 'правка пришла в облако вместе с записью моноблока');
   const admCmds = (await call(command, adm)).body;
   assert.equal(admCmds.find((r) => r.id === adminEdit.body.id).status, 'applied');
   assert.equal(admCmds.find((r) => r.id === adminEdit.body.id).result, 'запись #1 исправлена');
   assert.ok(!(await call(command, as(keeper))).body.some((r) => r.id === adminEdit.body.id), 'складовщик видит только свои операции');
 
-  // срок давности: через 30 дней несинхронизированная команда помечается expired
+  // срок давности: через 30 дней несинхронизированная команда помечается expired, запись в облаке не менялась
   const edit2 = await post(admin, 'edit', { id: 1, device: 'point-1', reason: 'тест срока', net_kg: 91 });
   assert.equal(edit2.code, 200);
   await db.query(`UPDATE commands SET ts = now() - interval '31 days' WHERE id=$1`, [edit2.body.id]);
   assert.equal((await dev({})).body.commands.length, 0);
   assert.equal((await call(command, adm)).body.find((r) => r.id === edit2.body.id).status, 'expired');
+  assert.equal((await db.query(`SELECT net_kg FROM movements WHERE device='point-1' AND id=1`))[0].net_kg, 90, 'просроченная команда следа не оставила');
 
-  // PATCH /api/command: админ может применить старые зависшие pending-команды в БД
+  // PATCH /api/command: применяет зависшие команды только для неактивных (> 24 ч) моноблоков
   await db.query(`INSERT INTO commands(device,user_name,user_role,kind,payload,status) VALUES('point-1','Администратор','admin','edit','{"id":1,"reason":"старая очередь","net_kg":95}'::jsonb,'pending')`);
   assert.equal((await call(command, { method: 'PATCH', body: {}, ...as(keeper) })).code, 403, 'складовщик не применяет очередь');
+  const patchLive = await call(command, { method: 'PATCH', body: {}, ...adm });
+  assert.equal(patchLive.body.applied, 0, 'команды активного моноблока не трогаем');
+  assert.ok(patchLive.body.skipped >= 1);
+  await db.query(`UPDATE devices SET last_seen = now() - interval '25 hours' WHERE device='point-1'`);
   const patchRes = await call(command, { method: 'PATCH', body: {}, ...adm });
   assert.equal(patchRes.code, 200);
   assert.equal(patchRes.body.applied, 1);
   const [m1Applied] = await db.query(`SELECT net_kg FROM movements WHERE device='point-1' AND id=1`);
-  assert.equal(m1Applied.net_kg, 95, 'старая команда из очереди применилась в movements');
+  assert.equal(m1Applied.net_kg, 95, 'зависшая команда неактивного моноблока применилась в облаке');
+  await db.query(`UPDATE devices SET last_seen = now() WHERE device='point-1'`);
 
   // лимит 20 ожидающих команд на человека
   for (let i = 0; i < 20; i++) {
@@ -427,81 +430,7 @@ test('операции с сайта: мгновенное применение,
   assert.equal(csrf.code, 403, 'чужой Origin отклонён');
 });
 
-test('Face ID / Passkey: регистрация, вход с проверкой ECDSA-подписи, отказ при подделке и отключении', async () => {
-  const crypto = require('crypto');
-  await globalThis.__TEST_DB.query('DELETE FROM login_fails');
-  const { cookie: admin } = await signIn(OWNER_PW);
-  const host = 'sklad-urozhay.vercel.app';
-  const origin = `https://${host}`;
-  const rpHash = crypto.createHash('sha256').update(host).digest();
-  const makeAuthData = (counter, flags = 0x05) => {
-    const b = Buffer.alloc(37);
-    rpHash.copy(b, 0);
-    b[32] = flags; // UP(0x01) + UV(0x04)
-    b.writeUInt32BE(counter, 33);
-    return b;
-  };
-  const cookieHeader = (res) => {
-    const sc = res.headers['Set-Cookie'];
-    return Array.isArray(sc) ? sc.map((s) => s.split(';')[0]).join('; ') : String(sc || '').split(';')[0];
-  };
-
-  // 1. Получение опций регистрации
-  const regOpt = await call(passkey, { method: 'POST', body: { action: 'reg_options' }, headers: { cookie: admin, host } });
-  assert.equal(regOpt.code, 200);
-  const chCookie = cookieHeader(regOpt);
-
-  // 2. Генерация настоящей пары ECDSA P-256 (как в Face ID / Secure Enclave)
-  const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-  const spki = publicKey.export({ format: 'der', type: 'spki' }).toString('base64url');
-  const credId = crypto.randomBytes(16).toString('base64url');
-  const regClientData = Buffer.from(JSON.stringify({ type: 'webauthn.create', challenge: regOpt.body.challenge, origin })).toString('base64url');
-
-  const regVer = await call(passkey, {
-    method: 'POST',
-    body: { action: 'reg_verify', id: credId, clientDataJSON: regClientData, authenticatorData: makeAuthData(1).toString('base64url'), publicKey: spki, alg: -7, device_name: 'iPhone Test' },
-    headers: { cookie: `${admin}; ${chCookie}`, host },
-  });
-  assert.equal(regVer.code, 200, JSON.stringify(regVer.body));
-
-  // Список ключей пользователя
-  const list = await call(passkey, { method: 'GET', headers: { cookie: admin, host } });
-  assert.equal(list.code, 200);
-  assert.equal(list.body.length, 1);
-  assert.equal(list.body[0].device_name, 'iPhone Test');
-
-  // 3. Вход по Face ID с настоящей подписью
-  const authOpt = await call(passkey, { method: 'POST', body: { action: 'auth_options' }, headers: { host } });
-  assert.equal(authOpt.code, 200);
-  const authChCookie = cookieHeader(authOpt);
-  const authClientBuf = Buffer.from(JSON.stringify({ type: 'webauthn.get', challenge: authOpt.body.challenge, origin }));
-  const authDataBuf = makeAuthData(2);
-  const signedData = Buffer.concat([authDataBuf, crypto.createHash('sha256').update(authClientBuf).digest()]);
-  const sig = crypto.sign('sha256', signedData, privateKey).toString('base64url');
-
-  const authOk = await call(passkey, {
-    method: 'POST',
-    body: { action: 'auth_verify', id: credId, clientDataJSON: authClientBuf.toString('base64url'), authenticatorData: authDataBuf.toString('base64url'), signature: sig },
-    headers: { cookie: authChCookie, host },
-  });
-  assert.equal(authOk.code, 200, JSON.stringify(authOk.body));
-  const newSession = Array.isArray(authOk.headers['Set-Cookie']) ? authOk.headers['Set-Cookie'][0].split(';')[0] : cookieOf(authOk);
-  assert.equal((await call(stock, as(newSession))).code, 200, 'сессия после Face ID открывает данные');
-
-  // 4. Поддельная подпись отклоняется
-  const authOpt2 = await call(passkey, { method: 'POST', body: { action: 'auth_options' }, headers: { host } });
-  const bad = await call(passkey, {
-    method: 'POST',
-    body: { action: 'auth_verify', id: credId, clientDataJSON: Buffer.from(JSON.stringify({ type: 'webauthn.get', challenge: authOpt2.body.challenge, origin })).toString('base64url'), authenticatorData: makeAuthData(3).toString('base64url'), signature: Buffer.from('fake').toString('base64url') },
-    headers: { cookie: cookieHeader(authOpt2), host },
-  });
-  assert.equal(bad.code, 401, 'поддельная подпись не проходит');
-
-  // 5. Удаление ключа
-  const del = await call(passkey, { method: 'DELETE', body: { id: credId }, headers: { cookie: admin, host } });
-  assert.equal(del.code, 200);
-  assert.equal((await call(passkey, { method: 'GET', headers: { cookie: admin, host } })).body.length, 0);
-});
+// Face ID / Passkey: проверки перенесены в test/auth.test.js (разбор attestationObject, одноразовые challenge).
 
 test('отчётная система: сводка, прошлый период, потери %, фильтры, накладные и Excel CSV', async () => {
   await globalThis.__TEST_DB.query('DELETE FROM login_fails');
@@ -547,10 +476,11 @@ test('расходы: категории, акты расхода, права, �
   assert.equal((await expReq('GET', undefined, keeper)).code, 403, 'складовщик не видит расходы');
   assert.equal((await call(report, { query: { from: today, to: today }, ...as(keeper) })).code, 403, 'складовщик не видит отчёт ОПиУ');
   assert.equal((await expReq('POST', { target: 'expense', category_id: cat.body.category.id, amount: 100000 }, keeper)).code, 403);
+  assert.equal((await expReq('POST', { target: 'expense', category_id: cat.body.category.id, amount: 100000 }, dir)).code, 403, 'директор только смотрит');
   const act = await expReq('POST', {
     target: 'expense', doc_date: today, category_id: cat.body.category.id, amount: 150000,
     counterparty: 'АгроСнаб', payment_method: 'transfer', comment: 'Аванс',
-  }, dir);
+  }, admin);
   assert.equal(act.code, 200);
 
   // Отчёт учитывает расходы и чистую прибыль (выручка - расходы)
@@ -589,12 +519,12 @@ test('контрагенты, оплаты, акт сверки и детали�
   const { cookie: dir } = await signIn('director-pass-2');
   const today = new Date().toISOString().slice(0, 10);
 
-  // Директор может создавать контрагента с типом и ИНН
+  // Администратор создаёт контрагента с типом и ИНН (директор — только просмотр)
   const cpRes = await call(status, {
     method: 'POST',
     query: { resource: 'refs' },
     body: { target: 'customer', name: 'Корзинка', kind: 'buyer', inn: '301234567', phone: '+998901234567' },
-    ...as(dir),
+    ...as(admin),
   });
   assert.equal(cpRes.code, 200);
   assert.equal(cpRes.body.customer.kind, 'buyer');
@@ -623,14 +553,14 @@ test('контрагенты, оплаты, акт сверки и детали�
     method: 'POST',
     query: { resource: 'payments' },
     body: { doc_date: today, counterparty: 'Корзинка', direction: 'in', amount: 300000, payment_method: 'transfer', comment: 'П/п 12' },
-    ...as(dir),
+    ...as(admin),
   });
   assert.equal(pay1.code, 200);
   const pay2 = await call(report, {
     method: 'POST',
     query: { resource: 'payments' },
     body: { doc_date: today, counterparty: 'Корзинка', direction: 'in', amount: 50000, payment_method: 'cash' },
-    ...as(dir),
+    ...as(admin),
   });
   assert.equal(pay2.code, 200);
   const cancPay = await call(report, {
@@ -689,7 +619,7 @@ test('CRM-карточка контрагента, многострочный а
       payment_terms: 'Отсрочка 7 дней',
       bank_details: 'Капиталбанк р/с 20208000',
     },
-    ...as(dir),
+    ...as(admin),
   });
   assert.equal(cp.code, 200);
   assert.equal(cp.body.customer.contact_person, 'Сардор');
@@ -714,7 +644,7 @@ test('CRM-карточка контрагента, многострочный а
         { name: 'Фитинги', qty: 10, unit: 'шт', price: 5000 },
       ],
     },
-    ...as(dir),
+    ...as(admin),
   });
   assert.equal(act.code, 200);
   const expAfter = await call(report, { query: { resource: 'expenses', from: today, to: today }, ...as(dir) });
@@ -734,7 +664,7 @@ test('CRM-карточка контрагента, многострочный а
       doc_number: 'СЧ-77-А',
       items: [{ name: 'Лента капельного полива', qty: 3, unit: 'шт', price: 120000 }],
     },
-    ...as(dir),
+    ...as(admin),
   });
   assert.equal(editAct.code, 200);
   const expEdited = await call(report, { query: { resource: 'expenses', from: today, to: today }, ...as(dir) });
@@ -755,14 +685,14 @@ test('CRM-карточка контрагента, многострочный а
       payment_method: 'transfer',
       doc_number: 'ДОГ-1',
     },
-    ...as(dir),
+    ...as(admin),
   });
   assert.equal(inv1.code, 200);
   const inv2 = await call(report, {
     method: 'POST',
     query: { resource: 'investments' },
     body: { doc_date: today, category: 'Оборудование и полив', title: 'Ошибочный дубль', investor: 'Асил', amount: 1000000 },
-    ...as(dir),
+    ...as(admin),
   });
   assert.equal(inv2.code, 200);
   const invCanc = await call(report, {

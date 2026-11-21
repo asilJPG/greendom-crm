@@ -10,7 +10,10 @@ process.env.SETUP_KEY = process.env.SETUP_KEY || 'dev-setup-key-0123456789abcdef
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-0123456789abcdef';
 
 const pg = new PGlite();
-globalThis.__TEST_DB = { query: async (text, params) => (await pg.query(text, params)).rows };
+globalThis.__TEST_DB = {
+  query: async (text, params) => (await pg.query(text, params)).rows,
+  transaction: async (list) => pg.transaction(async (tx) => { const out = []; for (const [t, p] of list) out.push((await tx.query(t, p || [])).rows); return out; }),
+};
 
 const routes = {};
 for (const f of fs.readdirSync(path.join(__dirname, '../api'))) routes['/api/' + f.replace('.js', '')] = require('../api/' + f);

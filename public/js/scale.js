@@ -1,30 +1,50 @@
 // Большое табло весов CAS AD через Web Serial (Chrome/Edge) + удобный ручной ввод для сенсорного экрана.
-// Протокол CAS AD: ENQ(05) -> ACK(06) -> DC1(11) -> кадр 01 02 S|U знак вес kg 03 04.
-const SC = { port: null, reader: null, writer: null, buf: [], pollTimer: null, polling: false };
+// Протокол CAS AD (не менять): 9600 8N1, DTR/RTS выкл., ENQ(05) -> ACK(06) -> DC1(11) -> кадр 01 02 S|U знак вес kg 03 04.
+import { parseDecimal } from './num.js';
+
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isAndroid = /Android/i.test(navigator.userAgent || '');
+
+// Текущее подключение (сессия порта). null — весы не подключены.
+const SC = { sess: null, connecting: false, userDisconnected: false };
 
 const state = {
   mode: 'manual', // 'scale' | 'manual'
   gross: 0,
   stable: false,
   online: false,
-  manualKg: null,
+  note: '', // пояснение, почему работает ручной ввод (нет USB на телефоне и т.п.)
 };
 
+let toastFn = () => {};
+
+const hasSerial = () => 'serial' in navigator && !!navigator.serial;
+
 function tareKg() {
-  return Math.max(0, (Number($('tare-g')?.value) || 0) / 1000);
+  const v = parseDecimal($('tare-g')?.value);
+  if (v === null) return 0;
+  if (Number.isNaN(v) || v < 0) return NaN;
+  return v / 1000;
+}
+
+function manualKg() {
+  return parseDecimal($('sc-manual-in')?.value);
 }
 
 export function getActiveWeightKg() {
-  if (state.mode === 'manual' || !SC.port) {
-    const v = Number($('sc-manual-in')?.value);
-    if (!Number.isFinite(v) || v <= 0) return { ok: false, error: 'Введите вес больше 0 кг' };
+  if (state.mode === 'manual' || !SC.sess) {
+    const v = manualKg();
+    if (v === null) return { ok: false, error: 'Введите вес больше 0 кг' };
+    if (Number.isNaN(v)) return { ok: false, error: 'Неверный вес. Пример: 1,5 или 1.5' };
+    if (v <= 0) return { ok: false, error: 'Введите вес больше 0 кг' };
     return { ok: true, net: Math.round(v * 1000) / 1000 };
   }
+  const tare = tareKg();
+  if (Number.isNaN(tare)) return { ok: false, error: 'Неверная тара (граммы). Пример: 350' };
   if (!state.online) return { ok: false, error: 'Нет сигнала с весов' };
   if (!state.stable) return { ok: false, error: 'Дождитесь, пока вес устоится' };
-  const net = Math.round((state.gross - tareKg()) * 1000) / 1000;
+  const net = Math.round((state.gross - tare) * 1000) / 1000;
   if (net <= 0) return { ok: false, error: 'Вес меньше веса пустого ящика' };
   return { ok: true, net };
 }
@@ -39,31 +59,44 @@ export function renderDisplay() {
   const dig = $('sc-digits');
   const stat = $('sc-stat');
   const grossEl = $('sc-gross');
-  const hasSerial = 'serial' in navigator;
   if (!dig || !stat) return;
+  const serial = hasSerial();
+  const connected = !!SC.sess;
 
-  $('sc-conn').hidden = !hasSerial || !!SC.port;
-  $('sc-off').hidden = !SC.port;
-  $('sc-manual-box').hidden = !(state.mode === 'manual' || !SC.port);
-  $('sc-mode-btn').hidden = !SC.port;
+  $('sc-conn').hidden = !serial || connected;
+  $('sc-conn').disabled = SC.connecting;
+  $('sc-off').hidden = !connected;
+  $('sc-manual-box').hidden = !(state.mode === 'manual' || !connected);
+  $('sc-mode-btn').hidden = !connected;
   $('sc-mode-btn').textContent = state.mode === 'manual' ? 'Переключить на весы' : 'Ввести вручную';
 
-  if (state.mode === 'manual' || !SC.port) {
-    const v = Number($('sc-manual-in')?.value || 0);
-    dig.innerHTML = `${v > 0 ? v.toFixed(3) : '0.000'}<small>кг</small>`;
-    dig.className = 'sc-digits' + (v > 0 ? ' manual' : '');
+  if (state.mode === 'manual' || !connected) {
+    const v = manualKg();
+    const okV = typeof v === 'number' && Number.isFinite(v) && v > 0;
+    dig.innerHTML = `${okV ? v.toFixed(3) : Number.isNaN(v) ? '—' : '0.000'}<small>кг</small>`;
+    dig.className = 'sc-digits' + (okV ? ' manual' : '');
     stat.className = 'sc-stat';
-    stat.textContent = !SC.port
-      ? (hasSerial ? 'Ручной ввод (подключите весы для авточтения)' : 'Ручной ввод веса')
-      : 'Режим ручного ввода';
+    stat.textContent = Number.isNaN(v)
+      ? 'Неверный вес. Пример: 1,5 или 1.5'
+      : state.note
+        ? state.note
+        : !connected
+          ? (serial ? 'Ручной ввод (подключите весы для авточтения)' : 'Ручной ввод веса')
+          : 'Режим ручного ввода';
     if (grossEl) grossEl.textContent = '—';
     return;
   }
 
-  const net = Math.max(0, Math.round((state.gross - tareKg()) * 1000) / 1000);
+  const tare = tareKg();
+  const net = Math.max(0, Math.round((state.gross - (Number.isNaN(tare) ? 0 : tare)) * 1000) / 1000);
   if (grossEl) grossEl.textContent = `${state.gross.toFixed(3)} кг`;
 
-  if (!state.online) {
+  if (Number.isNaN(tare)) {
+    dig.innerHTML = `—<small>кг</small>`;
+    dig.className = 'sc-digits';
+    stat.className = 'sc-stat';
+    stat.textContent = 'Неверная тара (граммы)';
+  } else if (!state.online) {
     dig.innerHTML = `—<small>кг</small>`;
     dig.className = 'sc-digits';
     stat.className = 'sc-stat';
@@ -86,10 +119,11 @@ export function renderDisplay() {
   }
 }
 
-function waitBuf(pred, ms) {
+function waitBuf(sess, pred, ms) {
   return new Promise((res) => {
     const t0 = Date.now();
     (function tick() {
+      if (sess.closing) return res(null);
       const v = pred();
       if (v !== null) return res(v);
       if (Date.now() - t0 > ms) return res(null);
@@ -98,20 +132,22 @@ function waitBuf(pred, ms) {
   });
 }
 
-async function pollOnce() {
-  if (!SC.port || !SC.writer || SC.polling) return;
-  SC.polling = true;
+async function pollOnce(sess) {
+  if (sess.closing || sess.polling || SC.sess !== sess) return;
+  sess.polling = true;
   try {
-    SC.buf.length = 0;
-    await SC.writer.write(Uint8Array.of(5));
-    const ack = await waitBuf(() => (SC.buf.length ? SC.buf[0] : null), 900);
-    if (ack !== 6) { state.online = false; renderDisplay(); return; }
-    SC.buf.length = 0;
-    await SC.writer.write(Uint8Array.of(0x11));
-    const frame = await waitBuf(() => {
-      const i = SC.buf.indexOf(4);
-      return i >= 0 ? SC.buf.slice(0, i + 1) : null;
+    sess.buf.length = 0;
+    await sess.writer.write(Uint8Array.of(0x05)); // ENQ
+    const ack = await waitBuf(sess, () => (sess.buf.length ? sess.buf[0] : null), 900);
+    if (sess.closing) return;
+    if (ack !== 0x06) { state.online = false; renderDisplay(); return; }
+    sess.buf.length = 0;
+    await sess.writer.write(Uint8Array.of(0x11)); // DC1
+    const frame = await waitBuf(sess, () => {
+      const i = sess.buf.indexOf(0x04);
+      return i >= 0 ? sess.buf.slice(0, i + 1) : null;
     }, 1500);
+    if (sess.closing) return;
     if (!frame) { state.online = false; renderDisplay(); return; }
     const m = /\x01\x02([SU])\s*([-+]?)\s*(\d+(?:\.\d+)?)/.exec(String.fromCharCode(...frame));
     if (m) {
@@ -121,74 +157,168 @@ async function pollOnce() {
       renderDisplay();
     }
   } catch {
-    state.online = false;
-    renderDisplay();
+    if (!sess.closing) { state.online = false; renderDisplay(); }
   } finally {
-    SC.polling = false;
+    sess.polling = false;
   }
 }
 
-function startPolling() {
-  clearInterval(SC.pollTimer);
-  SC.pollTimer = setInterval(pollOnce, 400);
-  pollOnce();
+/**
+ * Полностью закрывает сессию: останавливает опрос, отменяет чтение (await), снимает блокировки
+ * reader/writer и закрывает порт. Идемпотентна. fromLoop=true — вызвана из цикла чтения (reader уже освобождён).
+ */
+function closeSession(sess, { fromLoop = false } = {}) {
+  if (!sess) return Promise.resolve();
+  if (sess.closingPromise) return sess.closingPromise;
+  sess.closing = true;
+  clearInterval(sess.pollTimer);
+  if (SC.sess === sess) {
+    SC.sess = null;
+    state.online = false;
+    state.stable = false;
+    state.mode = 'manual';
+    renderDisplay();
+  }
+  sess.closingPromise = (async () => {
+    if (!fromLoop) {
+      try { await sess.reader.cancel(); } catch {}
+      try { await sess.loop; } catch {}
+    }
+    // дождаться завершения текущей записи (ENQ/DC1), чтобы снять lock writer без ошибок
+    for (let i = 0; i < 25 && sess.polling; i++) await sleep(20);
+    try { sess.writer.releaseLock(); } catch {}
+    try {
+      await sess.port.close();
+    } catch (e) {
+      // порт мог исчезнуть физически (выдернули USB) — это нормально
+      if (e && e.name !== 'NetworkError' && e.name !== 'InvalidStateError') console.warn('Весы: порт не закрылся', e);
+    }
+  })();
+  return sess.closingPromise;
 }
 
 async function openPort(port) {
-  await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+  // Если предыдущая сессия этого порта ещё закрывается — дождаться
+  if (SC.sess) await closeSession(SC.sess);
+  try {
+    await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+  } catch (e) {
+    // Порт остался открытым после сбоя: закрываем и пробуем ещё раз
+    if (e && e.name === 'InvalidStateError') {
+      try { await port.close(); } catch {}
+      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+    } else {
+      throw e;
+    }
+  }
   try { await port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch {}
   await sleep(300);
-  SC.port = port;
-  SC.buf = [];
-  SC.reader = port.readable.getReader();
-  SC.writer = port.writable.getWriter();
-  state.mode = 'scale';
-  (async () => {
+
+  const sess = {
+    port,
+    reader: port.readable.getReader(),
+    writer: port.writable.getWriter(),
+    buf: [],
+    pollTimer: null,
+    polling: false,
+    closing: false,
+    closingPromise: null,
+    loop: null,
+  };
+  sess.loop = (async () => {
     try {
       for (;;) {
-        const { value, done } = await SC.reader.read();
+        const { value, done } = await sess.reader.read();
         if (done) break;
-        SC.buf.push(...value);
+        if (value) sess.buf.push(...value);
       }
-    } catch {}
-    clearInterval(SC.pollTimer);
-    SC.port = null;
-    state.online = false;
-    state.mode = 'manual';
-    renderDisplay();
+    } catch {
+      // ошибка чтения: обычно USB выдернули
+    } finally {
+      try { sess.reader.releaseLock(); } catch {}
+    }
+    // без await: closeSession сама ждёт этот цикл, когда вызвана снаружи
+    if (!sess.closing) {
+      closeSession(sess, { fromLoop: true });
+      toastFn('Весы отключились. Можно подключить снова или ввести вес вручную', true);
+    }
   })();
+
+  SC.sess = sess;
+  state.mode = 'scale';
+  state.note = '';
+  state.online = false;
   renderDisplay();
-  startPolling();
+  sess.pollTimer = setInterval(() => pollOnce(sess), 400);
+  pollOnce(sess);
+}
+
+function fallbackToManual(note) {
+  state.mode = 'manual';
+  state.note = note;
+  renderDisplay();
+  $('sc-manual-in')?.focus();
+}
+
+async function connectByUser() {
+  if (SC.connecting || SC.sess) return;
+  if (!hasSerial()) return fallbackToManual('Этот браузер не поддерживает подключение весов — вводите вес вручную');
+  SC.connecting = true;
+  renderDisplay();
+  try {
+    let port;
+    try {
+      port = await navigator.serial.requestPort();
+    } catch (e) {
+      const name = e && e.name;
+      if (name === 'NotFoundError' && !isAndroid) return; // пользователь закрыл окно выбора порта
+      if (isAndroid || name === 'NotFoundError' || name === 'SecurityError' || name === 'NotSupportedError' || name === 'TypeError') {
+        return fallbackToManual('На этом устройстве браузер не видит USB-весы — вводите вес вручную');
+      }
+      toastFn('Не удалось выбрать порт весов: ' + (e && e.message ? e.message : name), true);
+      return fallbackToManual('Весы не подключены — вводите вес вручную');
+    }
+    SC.userDisconnected = false;
+    await openPort(port);
+  } catch (e) {
+    toastFn('Не удалось открыть порт весов: ' + (e && e.message ? e.message : 'ошибка'), true);
+    fallbackToManual(isAndroid
+      ? 'На этом устройстве USB-весы не поддерживаются — вводите вес вручную'
+      : 'Весы не подключились — проверьте кабель или вводите вес вручную');
+  } finally {
+    SC.connecting = false;
+    renderDisplay();
+  }
 }
 
 export async function autoConnectScale() {
   renderDisplay();
-  if (!('serial' in navigator) || SC.port) return;
+  if (!hasSerial() || SC.sess || SC.connecting || SC.userDisconnected) return;
+  SC.connecting = true;
   try {
-    const [p] = await navigator.serial.getPorts();
-    if (p) await openPort(p);
-  } catch {}
+    const ports = await navigator.serial.getPorts();
+    if (ports && ports[0]) await openPort(ports[0]);
+  } catch {
+    // тихо: остаётся ручной ввод
+  } finally {
+    SC.connecting = false;
+    renderDisplay();
+  }
 }
 
 export function initScale(toast) {
-  $('sc-conn').onclick = async () => {
-    try {
-      await openPort(await navigator.serial.requestPort());
-    } catch (e) {
-      if (e.name !== 'NotFoundError') toast('Не удалось открыть порт: ' + e.message, true);
-    }
-  };
+  toastFn = toast || (() => {});
+  $('sc-conn').onclick = connectByUser;
   $('sc-off').onclick = async () => {
-    clearInterval(SC.pollTimer);
+    const b = $('sc-off');
+    b.disabled = true;
+    SC.userDisconnected = true; // не переподключать автоматически при переходе между экранами
     try {
-      SC.reader.cancel();
-      SC.writer.releaseLock();
-      await SC.port.close();
-    } catch {}
-    SC.port = null;
-    state.online = false;
-    state.mode = 'manual';
-    renderDisplay();
+      await closeSession(SC.sess);
+    } finally {
+      b.disabled = false;
+      renderDisplay();
+    }
   };
   $('sc-mode-btn').onclick = () => {
     state.mode = state.mode === 'manual' ? 'scale' : 'manual';
@@ -196,5 +326,16 @@ export function initScale(toast) {
   };
   $('sc-manual-in').oninput = renderDisplay;
   $('tare-g').oninput = renderDisplay;
+
+  if (hasSerial()) {
+    try {
+      navigator.serial.addEventListener('disconnect', (e) => {
+        if (SC.sess && e.target === SC.sess.port) {
+          closeSession(SC.sess);
+          toastFn('Весы отключены (USB). Подключите кабель и нажмите «Подключить весы»', true);
+        }
+      });
+    } catch {}
+  }
   renderDisplay();
 }

@@ -1,5 +1,6 @@
 // Модуль «Инвестиции» (/investments): капитальные вложения в теплицу, учредители и окупаемость (ROI).
-import { api, errMsg } from './api.js';
+import { api, errMsg, newRequestId } from './api.js';
+import { readDecimal, round2 } from './num.js';
 import { moreBtnHtml, openRowMenu } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -19,9 +20,11 @@ const INV_CATS = [
   'Прочие вложения',
 ];
 
-let deps = { cur: () => 'сум', toast: () => {}, askText: async () => null };
+let deps = { me: () => null, cur: () => 'сум', toast: () => {}, askText: async () => null };
 let payMethod = 'transfer';
 let editingInvId = null;
+let invReqId = newRequestId(); // request_id формы нового вложения: один на форму, новый после успеха
+const isAdmin = () => { const me = deps.me && deps.me(); return !!me && me.role === 'admin'; };
 
 function showSubView(mode) {
   $('inv-list-view').hidden = mode !== 'list';
@@ -49,6 +52,7 @@ function openInvestmentForm(x = null) {
 
 export async function loadInvestments() {
   showSubView('list');
+  $('inv-open-add').hidden = !isAdmin();
   const r = await api('GET', '/api/report?resource=investments');
   if (!r.ok) return;
   const { summary: s, by_investor = [], by_category = [], items = [] } = r.data;
@@ -111,7 +115,7 @@ export async function loadInvestments() {
         </div>
         <div class="r" style="display:flex;align-items:center;gap:6px;flex:none">
           <span style="font-weight:700;white-space:nowrap">${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></span>
-          ${!cancelled ? moreBtnHtml(`data-inv-menu="${x.id}"`, 'Действия') : ''}
+          ${!cancelled && isAdmin() ? moreBtnHtml(`data-inv-menu="${x.id}"`, 'Действия') : ''}
         </div>
       </div>`;
   }).join('') || '<div class="empty">Записей об инвестициях пока нет. Нажмите «+ Вложение», чтобы внести стартовые расходы теплицы.</div>';
@@ -132,9 +136,15 @@ export async function loadInvestments() {
           onClick: async () => {
             const reason = await deps.askText({ title: `Отменить вложение №${id}`, label: 'Причина отмены', placeholder: 'Укажите причину', okText: 'Отменить' });
             if (!reason) return;
-            const r2 = await api('PATCH', '/api/report?resource=investments', { id, reason });
-            deps.toast(r2.ok ? 'Запись отменена' : errMsg(r2), !r2.ok);
-            if (r2.ok) loadInvestments();
+            if (b.disabled) return;
+            b.disabled = true;
+            try {
+              const r2 = await api('PATCH', '/api/report?resource=investments', { id, reason });
+              deps.toast(r2.ok ? 'Запись отменена' : errMsg(r2), !r2.ok);
+              if (r2.ok) loadInvestments();
+            } finally {
+              b.disabled = false;
+            }
           },
         },
       ]);
@@ -145,7 +155,7 @@ export async function loadInvestments() {
 export function initInvestments(config) {
   deps = config;
   $('inv-f-cat').innerHTML = INV_CATS.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  $('inv-open-add').onclick = () => openInvestmentForm(null);
+  $('inv-open-add').onclick = () => { if (isAdmin()) openInvestmentForm(null); };
   $('inv-back').onclick = () => showSubView('list');
   $('inv-f-cancel').onclick = () => showSubView('list');
 
@@ -158,6 +168,11 @@ export function initInvestments(config) {
 
   $('inv-f-save').onclick = async () => {
     const b = $('inv-f-save');
+    if (b.disabled) return;
+    if (!isAdmin()) { $('inv-f-err').textContent = 'Вносить вложения может только администратор'; return; }
+    const amt = readDecimal('inv-f-amt', { label: 'Сумма', positive: true, max: 1e13 });
+    if (!amt.ok) { $('inv-f-err').textContent = amt.error; $('inv-f-amt').focus(); return; }
+    $('inv-f-err').textContent = '';
     b.disabled = true;
     try {
       const payload = {
@@ -165,16 +180,17 @@ export function initInvestments(config) {
         category: $('inv-f-cat').value,
         title: $('inv-f-title').value,
         investor: $('inv-f-investor').value,
-        amount: $('inv-f-amt').value,
+        amount: round2(amt.value),
         payment_method: payMethod,
         doc_number: $('inv-f-docno').value,
         comment: $('inv-f-comment').value,
       };
       const r = editingInvId
         ? await api('PATCH', '/api/report?resource=investments', { ...payload, id: editingInvId, action: 'edit' })
-        : await api('POST', '/api/report?resource=investments', payload);
+        : await api('POST', '/api/report?resource=investments', { ...payload, request_id: invReqId });
       if (!r.ok) { $('inv-f-err').textContent = errMsg(r); return; }
-      deps.toast(editingInvId ? 'Вложение обновлено' : 'Инвестиция записана');
+      if (!editingInvId) invReqId = newRequestId();
+      deps.toast(editingInvId ? 'Вложение обновлено' : r.data && r.data.duplicate ? 'Это вложение уже было записано' : 'Инвестиция записана');
       await loadInvestments();
     } finally {
       b.disabled = false;

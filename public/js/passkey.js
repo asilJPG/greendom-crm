@@ -46,18 +46,14 @@ export async function registerPasskey() {
       excludeCredentials: (opts.excludeCredentials || []).map((c) => ({ ...c, id: b64uToBuf(c.id) })),
     },
   });
-  if (!cred || !cred.response) throw new Error('Не удалось создать ключ');
-  if (!cred.response.getPublicKey || !cred.response.getAuthenticatorData) {
-    throw new Error('Браузер не поддерживает экспорт ключа Passkey (обновите Safari/Chrome)');
-  }
+  if (!cred || !cred.response || !cred.response.attestationObject) throw new Error('Не удалось создать ключ');
 
+  // Сервер сам извлекает публичный ключ из attestationObject (CBOR → authData → COSE)
   const verifyRes = await api('POST', '/api/passkey', {
     action: 'reg_verify',
     id: cred.id,
     clientDataJSON: bufToB64u(cred.response.clientDataJSON),
-    authenticatorData: bufToB64u(cred.response.getAuthenticatorData()),
-    publicKey: bufToB64u(cred.response.getPublicKey()),
-    alg: cred.response.getPublicKeyAlgorithm ? cred.response.getPublicKeyAlgorithm() : -7,
+    attestationObject: bufToB64u(cred.response.attestationObject),
     device_name: detectDeviceName(),
   });
   if (!verifyRes.ok) throw new Error(errMsg(verifyRes));

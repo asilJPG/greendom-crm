@@ -4,7 +4,7 @@
   "private": true,
   "description": "Облачная копия склада: приёмник данных от моноблока и сайт для просмотра",
   "scripts": {
-    "test": "node --test test/cloud.test.js"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.1"

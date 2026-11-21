@@ -486,3 +486,6 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
   main > section, #ops-shell { max-width: 1020px; margin: 0 auto; }
   h1.page { font-size: 28px; }
 }
+
+/* Неверное число в поле ввода (вес, цена, сумма) */
+.bad-input, input[aria-invalid="true"] { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(177, 54, 45, .15); }

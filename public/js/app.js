@@ -1,4 +1,5 @@
-import { api, rawCall, errMsg, configureAuthHandlers } from './api.js';
+import { api, rawCall, errMsg, configureAuthHandlers, newRequestId } from './api.js';
+import { readDecimal, parseDecimal, clearInvalidOnInput, round2, round3 } from './num.js';
 import { initScale, autoConnectScale, getActiveWeightKg, clearManualWeight, renderDisplay } from './scale.js';
 import { isPasskeySupported, registerPasskey, loginWithPasskey } from './passkey.js';
 import { initReport, loadReport } from './report.js';
@@ -16,7 +17,7 @@ const money = (v) => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDig
 const iso = (d) => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const shift = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
 const dm = (s) => s.slice(8, 10) + '.' + s.slice(5, 7);
-const rid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+const rid = newRequestId;
 
 const GRADE_COLORS = ['#c79a1c', '#2c7a4e', '#2a6aa8', '#8a5fb0', '#b1362d', '#2f8f89', '#a86a2a', '#5a6b80'];
 const ROLE_NAME = { admin: 'Администратор', director: 'Директор', keeper: 'Складовщик' };
@@ -54,25 +55,28 @@ const state = {
   histRows: [],
   hType: '',
   lastSeenSec: 0,
-  lastPw: '',
+  today: '', // серверная дата (Asia/Tashkent) из /api/status
   timer: null,
   opsTimer: null,
   toastTimer: null,
-  pwTarget: null,
   edTarget: null,
+  edReqId: null,
   selGrade: { in: '', sl: '', wo: '' },
   selCustomer: '',
   woReason: 'Брак',
   saleCart: [],
 };
 
-function toast(text, bad = false) {
+function toast(text, bad = false, ms = 3200) {
   const el = $('toast');
   el.textContent = text;
   el.className = 'toast show' + (bad ? ' bad' : '');
   clearTimeout(state.toastTimer);
-  state.toastTimer = setTimeout(() => (el.className = 'toast'), 3200);
+  state.toastTimer = setTimeout(() => (el.className = 'toast'), ms);
 }
+
+// Сегодняшняя дата по серверу (Asia/Tashkent); дата телефона — только запасной вариант
+const today = () => state.today || iso(new Date());
 
 function gradeColor(g) {
   if (!(g in state.gradeIdx)) state.gradeIdx[g] = Object.keys(state.gradeIdx).length;
@@ -118,7 +122,7 @@ function askText({ title, label, value = '', placeholder = '', okText = 'Сох�
 
 /* ───── экраны, меню и клиентский роутер (History API) ───── */
 function showScreen(which) {
-  ['login', 'force', 'app'].forEach((k) => ($(k).hidden = k !== which));
+  ['login', 'app'].forEach((k) => ($(k).hidden = k !== which));
 }
 
 function openDrawer() { $('drawer').classList.add('open'); $('overlay').classList.add('open'); }
@@ -128,23 +132,21 @@ function showLogin() {
   clearInterval(state.timer);
   clearInterval(state.opsTimer);
   state.me = null;
-  state.lastPw = '';
   closeDrawer();
   showScreen('login');
   $('lg-pw').value = '';
   $('lg-pw').focus();
 }
 
-function showForce() {
-  clearInterval(state.timer);
-  clearInterval(state.opsTimer);
-  showScreen('force');
-  ['fc-old', 'fc-new', 'fc-new2'].forEach((id) => ($(id).value = ''));
-  $('fc-err').textContent = '';
-  $('fc-old').parentElement.hidden = !!state.lastPw;
+// Сменить свой пароль нельзя: пароль задаёт только администратор.
+// Если сервер всё ещё требует смену временного пароля — объясняем и возвращаем на вход.
+function showMustChangeBlocked() {
+  rawCall('POST', '/api/logout');
+  showLogin();
+  $('lg-err').textContent = 'Пароль временный. Попросите администратора задать вам новый пароль.';
 }
 
-configureAuthHandlers({ unauthorized: showLogin, mustChange: showForce });
+configureAuthHandlers({ unauthorized: showLogin, mustChange: showMustChangeBlocked });
 
 function allowedRoutes() {
   return ROUTES.filter((r) => !r[4] || (state.me && r[4].includes(state.me.role)));
@@ -203,9 +205,9 @@ function navigate(id, { push = true, replace = false } = {}) {
   if (ridTab === 'stock') loadStock();
   if (ridTab === 'report') {
     if (!$('r-from').value) {
-      const today = iso(new Date());
-      $('r-from').value = today.slice(0, 8) + '01';
-      $('r-to').value = today;
+      const t = today();
+      $('r-from').value = t.slice(0, 8) + '01';
+      $('r-to').value = t;
     }
     loadReport();
   }
@@ -233,14 +235,19 @@ window.addEventListener('popstate', () => {
   navigate(resolveRouteFromPath(location.pathname), { push: false });
 });
 
-/* ───── вход, выход, пароль ───── */
+/* ───── вход и выход ───── */
 async function login() {
-  const pw = $('lg-pw').value;
-  const r = await rawCall('POST', '/api/login', { password: pw });
-  if (!r.ok) { $('lg-err').textContent = errMsg(r); return; }
-  state.lastPw = pw;
-  $('lg-err').textContent = '';
-  await start();
+  const b = $('lg-go');
+  if (b.disabled) return;
+  b.disabled = true;
+  try {
+    const r = await rawCall('POST', '/api/login', { password: $('lg-pw').value });
+    if (!r.ok) { $('lg-err').textContent = errMsg(r); return; }
+    $('lg-err').textContent = '';
+    await start();
+  } finally {
+    b.disabled = false;
+  }
 }
 
 async function logout() {
@@ -248,26 +255,16 @@ async function logout() {
   showLogin();
 }
 
-function openPw(target) {
-  state.pwTarget = target;
-  $('pd-err').textContent = '';
-  $('pd-old').value = '';
-  $('pd-new').value = '';
-  $('pd-title').textContent = target ? `Новый пароль для «${target.name}»` : 'Сменить пароль';
-  $('pd-old-f').hidden = !!target;
-  $('pd-new-l').textContent = 'Новый пароль (от 6 символов)';
-  $('pw-dlg').showModal();
-}
-
 /* ───── старт, статус и справочники ───── */
 function paintStatus(d) {
+  if (typeof d.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.today)) state.today = d.today;
   if (Array.isArray(d.grades) && d.grades.length) state.grades = d.grades;
   if (Array.isArray(d.customers)) {
     state.customers = d.customers;
     const dl = $('cp-datalist');
     if (dl) dl.innerHTML = d.customers.map((c) => `<option value="${esc(c.name)}">`).join('');
   }
-  const dev = d.devices[0];
+  const dev = (d.devices || [])[0];
   if (!dev) {
     $('seen').textContent = 'нет данных';
     $('dot').className = 'dot bad';
@@ -285,7 +282,7 @@ function paintStatus(d) {
   $('dot').className = 'dot ' + (stale ? 'bad' : 'ok');
   $('stale').hidden = !stale;
   $('ops-stale').hidden = !stale;
-  if (stale) $('ops-stale').textContent = 'Моноблок сейчас не на связи: изменения сохранятся на сайте сразу, а моноблок подтянет их при подключении.';
+  if (stale) $('ops-stale').textContent = 'Моноблок сейчас не на связи. Приход, продажа и списание с сайта сохранятся сразу; исправления и отмены записей моноблока будут ждать склад, пока он не выйдет на связь.';
 }
 
 async function refreshAll() {
@@ -299,7 +296,7 @@ async function start() {
   if (r.status === 401) return showLogin();
   if (!r.ok) return toast(errMsg(r), true);
   state.me = r.data.user;
-  if (state.me.must_change) return showForce();
+  if (state.me.must_change) { state.me = null; return showMustChangeBlocked(); }
 
   showScreen('app');
   $('menu').textContent = state.me.name.trim().charAt(0).toUpperCase();
@@ -401,48 +398,65 @@ function renderSaleCart() {
 }
 
 /* ───── история ───── */
+// Права на строку истории:
+//  • накладная — для любой активной продажи;
+//  • исправить — только администратор (любая запись);
+//  • отменить — администратор (любая запись) или складовщик: только свои записи с сайта (device 'web') за сегодня.
+//    Записи моноблока правит/отменяет только администратор, и такие правки ждут склад.
+const isWebRow = (m) => m.device === 'web';
+function rowPerms(m) {
+  const me = state.me;
+  const active = m.status !== 'cancelled';
+  if (!me || !active) return { invoice: false, edit: false, cancel: false };
+  const admin = me.role === 'admin';
+  const mineToday = me.role === 'keeper' && isWebRow(m) && m.user_name === me.name && String(m.ts || '').slice(0, 10) === today();
+  return { invoice: m.type === 'out', edit: admin, cancel: admin || mineToday };
+}
+
 function hasRowActions(m) {
-  if (m.status === 'cancelled' || !state.me) return false;
-  const mine = state.me.role === 'keeper' && m.user_name === state.me.name && m.ts.slice(0, 10) === iso(new Date());
-  return m.type === 'out' || state.me.role === 'admin' || mine;
+  const p = rowPerms(m);
+  return p.invoice || p.edit || p.cancel;
+}
+
+async function openSaleInvoice(m) {
+  // Все строки продажи берём с сервера (а не из отфильтрованной/урезанной истории).
+  // Сервер ищет по COALESCE(sale_id, id), поэтому работает и для продажи из одной строки без sale_id.
+  const qs = new URLSearchParams({ sale_id: String(m.sale_id || m.id), device: m.device });
+  const r = await api('GET', `/api/movements?${qs.toString()}`);
+  if (!r.ok) { toast('Не удалось загрузить накладную: ' + errMsg(r), true); return; }
+  const rows = (Array.isArray(r.data) ? r.data : r.data?.rows || []).filter((x) => x.device === m.device && x.type === 'out');
+  const active = rows.filter((x) => x.status !== 'cancelled');
+  const list = active.length ? active : rows.length ? rows : [m];
+  const first = list[0] || m;
+  const sale = {
+    device: m.device,
+    sale_id: m.sale_id || m.id,
+    ts: first.ts || m.ts,
+    customer: first.customer || m.customer || '—',
+    user_name: first.user_name || m.user_name || '',
+    note: first.note || m.note || '',
+    total_kg: round3(list.reduce((a, i) => a + Number(i.net_kg || 0), 0)),
+    total_amount: round2(list.reduce((a, i) => a + Number(i.amount || 0), 0)),
+    items: list,
+  };
+  openInvoice(sale, { crop: state.crop, cur: state.cur });
 }
 
 function buildHistMenuItems(m) {
-  const mine = state.me.role === 'keeper' && m.user_name === state.me.name && m.ts.slice(0, 10) === iso(new Date());
+  const p = rowPerms(m);
+  const pendingNote = isWebRow(m) ? '' : ' (через моноблок)';
   const items = [];
-  if (m.type === 'out') {
+  if (p.invoice) items.push({ label: 'Накладная', onClick: () => openSaleInvoice(m) });
+  if (p.edit) items.push({ label: 'Исправить запись' + pendingNote, onClick: () => openEdit(m) });
+  if (p.cancel) {
+    const title = m.sale_id ? 'Отменить продажу' : 'Отменить запись';
     items.push({
-      label: 'Накладная',
-      onClick: () => {
-        const list = m.sale_id
-          ? state.histRows.filter((x) => x.device === m.device && x.sale_id === m.sale_id && x.status === 'active')
-          : [m];
-        const sale = {
-          device: m.device,
-          sale_id: m.sale_id || m.id,
-          ts: m.ts,
-          customer: m.customer || '—',
-          user_name: m.user_name || '',
-          note: m.note || '',
-          total_kg: Math.round(list.reduce((a, i) => a + Number(i.net_kg || 0), 0) * 1000) / 1000,
-          total_amount: Math.round(list.reduce((a, i) => a + Number(i.amount || 0), 0) * 100) / 100,
-          items: list,
-        };
-        openInvoice(sale, { crop: state.crop, cur: state.cur });
-      },
-    });
-  }
-  if (state.me.role === 'admin') {
-    items.push({ label: 'Исправить запись', onClick: () => openEdit(m) });
-  }
-  if (state.me.role === 'admin' || mine) {
-    items.push({
-      label: m.sale_id ? 'Отменить продажу' : 'Отменить запись',
+      label: title + pendingNote,
       danger: true,
       onClick: async () => {
         const reason = await askText({
-          title: m.sale_id ? 'Отменить продажу' : 'Отменить запись',
-          label: 'Причина отмены',
+          title,
+          label: isWebRow(m) ? 'Причина отмены' : 'Причина отмены (запись моноблока: отмена применится, когда склад выйдет на связь)',
           placeholder: 'Укажите причину',
           okText: 'Отменить',
         });
@@ -500,7 +514,9 @@ function openUserDetail(u = null) {
   const pwVal = $('ue-pw-val');
   const pwShow = $('ue-pw-show');
   const pwCopy = $('ue-pw-copy');
-  if (u && u.password) {
+  // У администраторов сервер отдаёт password: null — показывать нечего
+  $('ue-pw-note').hidden = !(u && u.role === 'admin' && u.password == null);
+  if (u && typeof u.password === 'string' && u.password) {
     pwBox.hidden = false;
     pwVal.textContent = '••••••';
     pwShow.textContent = 'Показать';
@@ -516,6 +532,31 @@ function openUserDetail(u = null) {
     };
   } else {
     pwBox.hidden = true;
+    pwShow.onclick = null;
+    pwCopy.onclick = null;
+  }
+
+  // Face ID (passkeys): количество ключей и сброс администратором
+  const pkBox = $('ue-pk-box');
+  const pkReset = $('ue-pk-reset');
+  pkBox.hidden = !u;
+  if (u) {
+    const n = Number(u.passkeys || 0);
+    $('ue-pk-val').textContent = n > 0 ? `подключено ключей: ${n}` : 'не подключён';
+    const isAdmin = state.me && state.me.role === 'admin';
+    pkReset.hidden = !(isAdmin && n > 0);
+    pkReset.onclick = async () => {
+      if (!confirm(`Сбросить Face ID у «${u.name}»? Все ключи входа (${n}) будут удалены, вход только по паролю.`)) return;
+      pkReset.disabled = true;
+      try {
+        const r = await api('PATCH', '/api/users', { id: u.id, reset_passkeys: true });
+        if (!r.ok) { $('ue-err').textContent = errMsg(r); return; }
+        toast('Face ID сброшен');
+        await loadUsers();
+      } finally {
+        pkReset.disabled = false;
+      }
+    };
   }
 
   const tog = $('ue-toggle');
@@ -543,6 +584,7 @@ function openUserDetail(u = null) {
     const role = $('ue-role').value;
     const password = $('ue-new-pw').value;
     if (!name) { $('ue-err').textContent = 'Укажите имя'; return; }
+    if (b.disabled) return;
     b.disabled = true;
     try {
       if (!u) {
@@ -575,7 +617,7 @@ async function loadUsers() {
   const r = await api('GET', '/api/users');
   if (!r.ok) return;
   $('u-rows').innerHTML = '';
-  r.data.forEach((u) => {
+  (Array.isArray(r.data) ? r.data : []).forEach((u) => {
     const el = document.createElement('div');
     el.className = `u-row${u.active ? '' : ' off'}`;
     const initial = (u.name || '?').trim().charAt(0).toUpperCase();
@@ -585,7 +627,7 @@ async function loadUsers() {
       `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(u.name)}</b>` +
       `<span class="badge b-${u.role}">${ROLE_NAME[u.role] || u.role}</span>` +
       `${u.active ? '' : '<span class="badge b-off">Отключён</span>'}</div>` +
-      `<div class="small muted" style="margin-top:3px">вход: ${esc(u.last_login || '—')}</div>` +
+      `<div class="small muted" style="margin-top:3px">вход: ${esc(u.last_login || '—')} · Face ID: ${Number(u.passkeys || 0) > 0 ? `ключей ${Number(u.passkeys)}` : 'нет'}</div>` +
       `</div>` +
       editBtnHtml('', 'Открыть карточку сотрудника');
     el.onclick = () => openUserDetail(u);
@@ -605,10 +647,17 @@ async function loadLog() {
 }
 
 /* ───── команды и очередь ───── */
+const KIND_DONE = { intake: 'Приход записан', sale: 'Продажа оформлена', writeoff: 'Списание записано', edit: 'Запись исправлена', cancel_movement: 'Запись отменена', cancel_sale: 'Продажа отменена' };
+
 async function sendCmd(kind, payload, requestId) {
   const r = await api('POST', '/api/command', { kind, payload, request_id: requestId || rid() });
   if (!r.ok) { toast(errMsg(r), true); return false; }
-  toast(r.data.duplicate ? 'Эта операция уже принята' : r.data.status === 'pending' ? 'Сохранено на сайте (синхронизируется со складом)' : 'Сохранено');
+  const d = r.data || {};
+  if (d.duplicate) toast('Эта операция уже принята ранее');
+  else if (d.status === 'pending') {
+    const where = state.me && state.me.role === 'admin' ? ' Статус — в разделе «Очередь».' : '';
+    toast(`${KIND[kind] || 'Изменение'}: ждёт склад. Сайт принял, моноблок применит при выходе на связь.${where}`, false, 7000);
+  } else toast(d.result ? `${KIND_DONE[kind] || 'Выполнено'}: ${d.result}` : (KIND_DONE[kind] || 'Выполнено'));
   if (state.tab === 'history') loadHistory();
   else if (state.tab === 'queue') loadOps();
   else {
@@ -635,7 +684,8 @@ function guard(btn, fn) {
 async function loadOps() {
   const r = await api('GET', '/api/command');
   if (!r.ok) return;
-  const pend = r.data.filter((c) => c.status === 'pending').length;
+  const list = Array.isArray(r.data) ? r.data : [];
+  const pend = list.filter((c) => c.status === 'pending').length;
   const qb = $('q-badge');
   if (qb) { qb.textContent = pend; qb.hidden = !pend; }
   const qa = $('q-apply');
@@ -646,24 +696,27 @@ async function loadOps() {
     if (c.kind === 'intake') return `${p.grade} ${p.net_kg} кг`;
     if (c.kind === 'writeoff') return `${p.grade} ${p.net_kg} кг, ${p.reason}`;
     if (c.kind === 'sale') return `${p.customer}: ${(p.items || []).map((i) => i.grade + ' ' + i.net_kg).join(', ')}`;
-    if (c.kind === 'edit') return `запись #${p.id}: ${p.reason}`;
-    return `#${p.id}: ${p.reason}`;
+    const src = p.device && p.device !== 'web' ? ' (запись моноблока)' : p.device === 'web' ? ' (запись сайта)' : '';
+    if (c.kind === 'edit') return `запись #${p.id}${src}: ${p.reason}`;
+    return `#${p.id}${src}: ${p.reason}`;
   };
-  $('ops-list').innerHTML = r.data.length
-    ? `<ul class="list">${r.data.map((c) => {
+  $('ops-list').innerHTML = list.length
+    ? `<ul class="list">${list.map((c) => {
         const [t, cl] = ST[c.status] || [c.status, ''];
-        return row(`${esc(KIND[c.kind] || c.kind)} <span class="badge ${cl}">${t}</span>`, `${esc(desc(c))}${c.result ? '<br>' + esc(c.result) : ''}`, `<span class="small muted">${esc(c.ts.slice(5))}</span>`);
+        const hint = c.status === 'pending' ? '<br><span class="small">Сайт принял изменение, моноблок ещё не применил его.</span>' : '';
+        return row(`${esc(KIND[c.kind] || c.kind)} <span class="badge ${cl}">${t}</span>`, `${esc(desc(c))}${c.result ? '<br>' + esc(c.result) : ''}${hint}`, `<span class="small muted">${esc(String(c.ts || '').slice(5))}</span>`);
       }).join('')}</ul>`
     : '<div class="empty">Пока ничего</div>';
 }
 
 function openEdit(m) {
   state.edTarget = m;
+  state.edReqId = rid(); // один request_id на открытие диалога: повтор после сбоя сети не задвоит правку
   renderOpsTiles();
-  $('ed-err').textContent = '';
+  $('ed-err').textContent = isWebRow(m) ? '' : 'Запись моноблока: исправление применится, когда склад выйдет на связь.';
   $('ed-title').textContent = `Исправить запись #${m.id}`;
   $('ed-grade').value = m.grade;
-  $('ed-kg').value = m.net_kg;
+  $('ed-kg').value = m.net_kg ?? '';
   $('ed-worker').value = m.worker || '';
   $('ed-note').value = m.note || '';
   $('ed-in').hidden = m.type !== 'in';
@@ -679,18 +732,10 @@ function openEdit(m) {
 $('lg-go').onclick = login;
 $('lg-pw').onkeydown = (e) => { if (e.key === 'Enter') login(); };
 $('logout-btn').onclick = logout;
-$('fc-go').onclick = async () => {
-  if ($('fc-new').value !== $('fc-new2').value) { $('fc-err').textContent = 'Пароли не совпадают'; return; }
-  const r = await rawCall('POST', '/api/password', { old_password: state.lastPw || $('fc-old').value, new_password: $('fc-new').value });
-  if (!r.ok) { $('fc-err').textContent = errMsg(r); return; }
-  state.lastPw = '';
-  await start();
-};
 
 $('menu').onclick = () => { $('md-name').textContent = state.me.name; $('md-role').textContent = ROLE_NAME[state.me.role] || state.me.role; $('menu-dlg').showModal(); loadPasskeys(); };
 $('md-close').onclick = () => $('menu-dlg').close();
 $('md-out').onclick = () => { $('menu-dlg').close(); logout(); };
-$('md-pw').onclick = () => { $('menu-dlg').close(); openPw(null); };
 
 async function loadPasskeys() {
   const box = $('md-pk-list');
@@ -740,17 +785,6 @@ isPasskeySupported().then((ok) => {
   $('lg-pk').hidden = !ok;
   $('md-pk').hidden = !ok;
 });
-
-$('pd-cancel').onclick = () => $('pw-dlg').close();
-$('pd-ok').onclick = async () => {
-  const r = state.pwTarget
-    ? await api('PATCH', '/api/users', { id: state.pwTarget.id, password: $('pd-new').value })
-    : await api('POST', '/api/password', { old_password: $('pd-old').value, new_password: $('pd-new').value });
-  if (!r.ok) { $('pd-err').textContent = errMsg(r); return; }
-  $('pw-dlg').close();
-  toast(state.pwTarget ? 'Пароль обновлён' : 'Пароль изменён');
-  if (state.pwTarget) loadUsers();
-};
 
 $('burger').onclick = openDrawer;
 $('drawer-close').onclick = closeDrawer;
@@ -821,26 +855,70 @@ guard($('in-go'), async (id) => {
 });
 
 // ── Продажа (выбор покупателя чипами + добавление позиций с весов) ──
+let newCustReqId = rid();
 $('sl-new-cust').onclick = async () => {
+  const btn = $('sl-new-cust');
+  if (btn.disabled) return;
   const name = await askText({ title: 'Новый покупатель', label: 'Название или имя', placeholder: 'Напр. Корзинка', okText: 'Добавить' });
   if (!name) return;
-  const r = await api('POST', '/api/status?resource=refs', { target: 'customer', name });
-  if (!r.ok) { toast(errMsg(r), true); return; }
-  state.customers.push(r.data.customer);
-  state.selCustomer = r.data.customer.name;
-  renderCustomerChips();
-  toast('Покупатель добавлен');
+  btn.disabled = true;
+  try {
+    const r = await api('POST', '/api/status?resource=refs', { target: 'customer', name, request_id: newCustReqId });
+    if (!r.ok) { toast(errMsg(r), true); return; }
+    newCustReqId = rid();
+    const c = r.data && r.data.customer;
+    if (c && !state.customers.some((x) => x.name === c.name)) state.customers.push(c);
+    if (!c) { const st = await api('GET', '/api/status'); if (st.ok) paintStatus(st.data); }
+    state.selCustomer = c ? c.name : name;
+    renderCustomerChips();
+    toast(r.data && r.data.duplicate ? 'Покупатель уже был добавлен' : 'Покупатель добавлен');
+  } finally {
+    btn.disabled = false;
+  }
 };
+
+// Живой подсчёт суммы позиции: вес × цена видно сразу, ещё до «Взвесить и добавить позицию».
+function updateSaleLive() {
+  const live = $('sl-live'), ovEl = $('sl-amt-ov');
+  if (!live || !live.offsetParent) return; // экран продажи не открыт
+  const price = parseDecimal($('sl-price').value), ov = parseDecimal(ovEl.value);
+  const w = getActiveWeightKg();
+  const cartTotal = state.saleCart.reduce((a, i) => a + Number(i.amount || 0), 0);
+  let pos = null, text = '';
+  if (ov !== null && Number.isFinite(ov) && ov >= 0) {
+    pos = round2(ov);
+    text = `Сумма позиции (вручную): <b>${money(pos)} ${esc(state.cur)}</b>`;
+  } else if (w.ok && price !== null && Number.isFinite(price) && price > 0) {
+    pos = round2(w.net * price);
+    text = `${kg(w.net)} кг × ${money(price)} = <b>${money(pos)} ${esc(state.cur)}</b>`;
+  } else if (price !== null && Number.isFinite(price) && price > 0) {
+    text = `<span class="muted">${esc(w.error || 'Нет веса')}</span>`;
+  }
+  ovEl.placeholder = pos !== null && !(ov !== null) ? `авто: ${money(pos)}` : 'авто';
+  live.innerHTML = text ? `${text}${pos !== null ? ' <span class="muted">· нажмите «Взвесить и добавить позицию»</span>' : ''}` : '';
+  $('sl-total').textContent = pos !== null
+    ? `${money(cartTotal)} ${state.cur} (+ ${money(pos)} не добавлено)`
+    : `${money(cartTotal)} ${state.cur}`;
+}
+setInterval(updateSaleLive, 400);
 
 $('sl-add-pos').onclick = () => {
   if (!state.selGrade.sl) return toast('Выберите сорт', true);
+  const pr = readDecimal('sl-price', { label: 'Цена за кг', max: 1e9 });
+  if (!pr.ok) return toast(pr.error, true);
+  const ov = readDecimal('sl-amt-ov', { label: 'Сумма', max: 1e12 });
+  if (!ov.ok) return toast(ov.error, true);
+  const price = pr.value;
+  if (price === null && ov.value === null) {
+    $('sl-price').classList.add('bad-input');
+    $('sl-price').focus();
+    return toast('Укажите цену за кг или сумму позиции', true);
+  }
   const w = getActiveWeightKg();
   if (!w.ok) return toast(w.error, true);
-  const priceRaw = $('sl-price').value;
-  const price = priceRaw === '' ? null : Number(priceRaw);
-  const ovRaw = $('sl-amt-ov').value;
-  const amount = ovRaw !== '' ? Number(ovRaw) : (price != null ? Math.round(w.net * price * 100) / 100 : 0);
+  const amount = ov.value !== null ? round2(ov.value) : round2(w.net * price);
   if (!Number.isFinite(amount) || amount < 0) return toast('Неверная сумма', true);
+  if (amount === 0 && !confirm(`Позиция «${state.selGrade.sl}» ${kg(w.net)} кг на сумму 0 ${state.cur}. Добавить бесплатно?`)) return;
   state.saleCart.push({ grade: state.selGrade.sl, net_kg: w.net, price_per_kg: price, amount });
   $('sl-amt-ov').value = '';
   clearManualWeight();
@@ -850,6 +928,8 @@ $('sl-add-pos').onclick = () => {
 guard($('sl-go'), async (id) => {
   if (!state.selCustomer) { toast('Выберите покупателя', true); return false; }
   if (!state.saleCart.length) { toast('Добавьте хотя бы одну позицию', true); return false; }
+  const total = round2(state.saleCart.reduce((a, i) => a + Number(i.amount || 0), 0));
+  if (total <= 0 && !confirm(`Сумма продажи 0 ${state.cur}. Провести продажу без оплаты?`)) return false;
   const ok = await sendCmd('sale', { customer: state.selCustomer, note: $('sl-note').value, items: state.saleCart }, id);
   if (ok) {
     state.saleCart = [];
@@ -895,23 +975,44 @@ $('q-apply').onclick = async () => {
 
 $('ed-cancel').onclick = () => $('ed-dlg').close();
 $('ed-ok').onclick = async () => {
+  const btn = $('ed-ok');
+  if (btn.disabled) return;
   const m = state.edTarget;
-  const p = { id: m.id, device: m.device, reason: $('ed-reason').value };
-  if (!p.reason.trim()) { $('ed-err').textContent = 'Укажите причину'; return; }
-  const put = (k, v, old) => { if (String(v) !== String(old ?? '')) p[k] = v; };
-  put('grade', $('ed-grade').value, m.grade);
-  put('net_kg', $('ed-kg').value, m.net_kg);
-  put('note', $('ed-note').value, m.note || '');
-  if (m.type === 'in') put('worker', $('ed-worker').value, m.worker || '');
+  if (!m) return;
+  const p = { id: m.id, device: m.device, reason: $('ed-reason').value.trim() };
+  if (!p.reason) { $('ed-err').textContent = 'Укажите причину'; return; }
+  const kgIn = readDecimal('ed-kg', { label: 'Вес нетто', positive: true, max: 1e6 });
+  if (!kgIn.ok) { $('ed-err').textContent = kgIn.error; return; }
+  const putStr = (k, v, old) => { if (String(v) !== String(old ?? '')) p[k] = v; };
+  const putNum = (k, v, old) => { if (v !== null && (old == null || Math.abs(Number(old) - v) > 1e-9)) p[k] = v; };
+  putStr('grade', $('ed-grade').value, m.grade);
+  putNum('net_kg', round3(kgIn.value), m.net_kg);
+  putStr('note', $('ed-note').value, m.note || '');
+  if (m.type === 'in') putStr('worker', $('ed-worker').value, m.worker || '');
   if (m.type === 'out') {
-    put('customer', $('ed-cust').value, m.customer || '');
-    put('price_per_kg', $('ed-price').value, m.price_per_kg);
-    put('amount', $('ed-amount').value, m.amount);
+    const pr = readDecimal('ed-price', { label: 'Цена за кг', max: 1e9 });
+    if (!pr.ok) { $('ed-err').textContent = pr.error; return; }
+    const am = readDecimal('ed-amount', { label: 'Сумма', max: 1e12 });
+    if (!am.ok) { $('ed-err').textContent = am.error; return; }
+    putStr('customer', $('ed-cust').value.trim(), m.customer || '');
+    putNum('price_per_kg', pr.value, m.price_per_kg);
+    putNum('amount', am.value === null ? null : round2(am.value), m.amount);
   }
   if (Object.keys(p).length <= 3) { $('ed-err').textContent = 'Ничего не изменено'; return; }
-  if (await sendCmd('edit', p)) $('ed-dlg').close();
+  btn.disabled = true;
+  $('ed-cancel').disabled = true;
+  try {
+    if (await sendCmd('edit', p, state.edReqId)) {
+      state.edReqId = rid();
+      $('ed-dlg').close();
+    }
+  } finally {
+    btn.disabled = false;
+    $('ed-cancel').disabled = false;
+  }
 };
 
+clearInvalidOnInput();
 initScale(toast);
 initInvoice(toast);
 initReport({
@@ -926,17 +1027,20 @@ initReport({
 });
 initExpenses({
   me: () => state.me,
+  today,
   cur: () => state.cur,
   crop: () => state.crop,
   toast,
   askText,
 });
 initInvestments({
+  me: () => state.me,
   cur: () => state.cur,
   toast,
   askText,
 });
 initRefs({
+  me: () => state.me,
   toast,
   gradeColor,
   onRefsChanged: async () => {
@@ -945,6 +1049,7 @@ initRefs({
   },
 });
 initCounterparties({
+  me: () => state.me,
   cur: () => state.cur,
   crop: () => state.crop,
   toast,

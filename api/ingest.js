@@ -1,43 +1,86 @@
 // Приёмник: сюда моноблок отправляет новые операции. Повторная отправка безопасна (upsert по device+id).
 const { query, ensureSchema } = require('../lib/db');
 const { requireIngestToken } = require('../lib/auth');
-const { getStock } = require('../lib/warehouse');
-const { notifyIntake, notifySale } = require('../lib/telegram');
+const { logError } = require('../lib/http');
+const { getStock, webMovementsSince } = require('../lib/warehouse');
+const { sendMany, notifyIntake, notifyIntakeSummary, notifySale, notifySalesSummary } = require('../lib/telegram');
+
+const MAX_SALE_MESSAGES = 8; // больше — одной сводкой (лимиты Telegram и время ответа моноблоку)
+const MAX_SINGLE_INTAKES = 3; // больше приходов в пачке — одним сводным сообщением
+const TG_BUDGET_MS = Number(process.env.TG_BUDGET_MS) || 7000; // общий бюджет на уведомления: моноблок ждёт ответ не больше 20 с
 
 const TYPES = new Set(['in', 'out', 'writeoff']);
-const TS = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/;
-const numOrNull = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+const TS = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/;
+const MAX_KG = 100000;
+const MAX_AMOUNT = 1e12;
+const MAX_PRICE = 1e9;
+
+// Настоящая календарная дата-время «YYYY-MM-DD HH:MM:SS» (2026-02-30, 25:00 не проходят), год 2020…(текущий+1).
+function validTs(v) {
+  if (typeof v !== 'string') return null;
+  const m = TS.exec(v);
+  if (!m) return null;
+  const [y, mo, d, h, mi, se] = m.slice(1).map(Number);
+  if (y < 2020 || y > new Date().getUTCFullYear() + 1) return null;
+  if (h > 23 || mi > 59 || se > 59) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`;
+}
+
+const empty = (v) => v === null || v === undefined || v === '';
+// Число из JSON (или числовая строка); всё остальное — NaN.
+const toNum = (v) => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '') ? Number(v) : NaN);
 
 function cleanMovement(m, i) {
   const bad = (why) => {
-    const e = new Error(`операция #${i}: ${why}`);
+    const e = new Error(`операция #${i}${m && Number.isInteger(m.id) ? ` (id ${m.id})` : ''}: ${why}`);
     e.status = 400;
     throw e;
   };
+  if (!m || typeof m !== 'object') bad('неверная запись');
+  // необязательное число: null/пусто -> null; иначе конечное, >= 0 и <= max
+  const optNum = (field, max) => {
+    if (empty(m[field])) return null;
+    const x = toNum(m[field]);
+    if (!Number.isFinite(x) || x < 0 || x > max) bad(`неверное значение ${field} (${String(m[field]).slice(0, 30)})`);
+    return x;
+  };
   if (!Number.isInteger(m.id)) bad('нет id');
-  if (!TYPES.has(m.type)) bad('неизвестный тип');
+  if (!TYPES.has(m.type)) bad('неизвестный тип (type должен быть in, out или writeoff)');
   if (typeof m.grade !== 'string' || !m.grade.trim()) bad('нет сорта');
-  if (!Number.isFinite(Number(m.net_kg))) bad('неверный вес');
-  if (typeof m.ts !== 'string' || !TS.test(m.ts)) bad('неверное время');
+  const net = toNum(m.net_kg);
+  if (!Number.isFinite(net) || net <= 0 || net > MAX_KG) bad(`неверный вес net_kg (${String(m.net_kg).slice(0, 30)}): нужно больше 0 и не больше ${MAX_KG}`);
+  const gross = optNum('gross_kg', MAX_KG);
+  const tare = optNum('tare_kg', MAX_KG);
+  const price = optNum('price_per_kg', MAX_PRICE);
+  const amount = optNum('amount', MAX_AMOUNT);
+  const ts = validTs(m.ts);
+  if (!ts) bad(`неверное время ts (${String(m.ts).slice(0, 30)})`);
+  let cancelledTs = null;
+  if (!empty(m.cancelled_ts)) {
+    cancelledTs = validTs(m.cancelled_ts);
+    if (!cancelledTs) bad(`неверное время cancelled_ts (${String(m.cancelled_ts).slice(0, 30)})`);
+  }
   return {
     id: m.id,
-    ts: m.ts.replace('T', ' ').slice(0, 19),
+    ts,
     type: m.type,
     grade: m.grade.trim().slice(0, 60),
-    gross_kg: numOrNull(m.gross_kg),
-    tare_kg: numOrNull(m.tare_kg),
-    net_kg: Number(m.net_kg),
+    gross_kg: gross,
+    tare_kg: tare,
+    net_kg: net,
     manual: Boolean(m.manual),
     worker: String(m.worker || '').slice(0, 120),
     note: String(m.note || '').slice(0, 300),
     sale_id: Number.isInteger(m.sale_id) ? m.sale_id : null,
     customer: m.customer ? String(m.customer).slice(0, 120) : null,
-    price_per_kg: numOrNull(m.price_per_kg),
-    amount: numOrNull(m.amount),
+    price_per_kg: price,
+    amount,
     user_name: m.user_name ? String(m.user_name).slice(0, 120) : null,
     status: m.status === 'cancelled' ? 'cancelled' : 'active',
     cancel_reason: m.cancel_reason ? String(m.cancel_reason).slice(0, 300) : null,
-    cancelled_ts: m.cancelled_ts && TS.test(m.cancelled_ts) ? m.cancelled_ts.slice(0, 19) : null,
+    cancelled_ts: cancelledTs,
   };
 }
 
@@ -71,13 +114,21 @@ module.exports = async (req, res) => {
     }
     const device = String(b.device || '').trim();
     if (!device || device.length > 64) return res.status(400).json({ error: 'не указано устройство' });
+    // 'web' — это записи самого сайта; моноблок не может под ним писать (иначе смешается с веб-операциями)
+    if (device.toLowerCase() === 'web') return res.status(400).json({ error: 'имя устройства «web» зарезервировано за сайтом' });
     const list = Array.isArray(b.movements) ? b.movements : [];
     if (list.length > 500) return res.status(400).json({ error: 'слишком много операций за раз (максимум 500)' });
     const rows = list.map(cleanMovement);
 
     await ensureSchema();
-    // Сначала фиксируем ответы моноблока на операции с сайта (повтор безопасен: меняем только незавершённые).
-    // Это важно сделать ДО записи movements: подтверждённая команда снимает защиту с этой строки.
+    // Сорта, переименованные на сайте: старое имя от моноблока переводим в новое (пока моноблок не переименует у себя).
+    const aliasRows = await query(
+      `SELECT old_name, new_name FROM grade_aliases a WHERE NOT EXISTS (SELECT 1 FROM grades g WHERE g.name = a.old_name) ORDER BY ts`
+    );
+    const alias = new Map(aliasRows.map((a) => [a.old_name, a.new_name]));
+    for (const r of rows) if (alias.has(r.grade)) r.grade = alias.get(r.grade);
+
+    // Ответы моноблока на команды с сайта (повтор безопасен: меняем только незавершённые).
     const acks = Array.isArray(b.acks) ? b.acks.slice(0, 100) : [];
     for (const a of acks) {
       if (!Number.isInteger(a.id) || !['applied', 'rejected'].includes(a.status)) continue;
@@ -88,14 +139,17 @@ module.exports = async (req, res) => {
     }
 
     let newRows = [];
+    let knownSales = new Set();
     if (rows.length) {
       const existing = await query(
-        `SELECT id FROM movements WHERE device=$1 AND id = ANY($2::int[])`,
-        [device, rows.map((r) => r.id)]
+        `SELECT id, sale_id FROM movements WHERE device=$1 AND (id = ANY($2::int[]) OR sale_id = ANY($3::int[]))`,
+        [device, rows.map((r) => r.id), rows.filter((r) => r.sale_id).map((r) => r.sale_id)]
       );
       const existingIds = new Set(existing.map((e) => e.id));
+      knownSales = new Set(existing.filter((e) => e.sale_id).map((e) => e.sale_id));
       newRows = rows.filter((r) => !existingIds.has(r.id) && r.status === 'active' && (r.type === 'in' || r.type === 'out'));
 
+      // Записи моноблока — его собственные: облако их не правит (правки с сайта идут командами), поэтому принимаем как есть.
       await query(
         `INSERT INTO movements (device,id,ts,type,grade,gross_kg,tare_kg,net_kg,manual,worker,note,sale_id,customer,
                                 price_per_kg,amount,user_name,status,cancel_reason,cancelled_ts,updated_at)
@@ -110,23 +164,14 @@ module.exports = async (req, res) => {
               net_kg=EXCLUDED.net_kg, manual=EXCLUDED.manual, worker=EXCLUDED.worker, note=EXCLUDED.note,
               sale_id=EXCLUDED.sale_id, customer=EXCLUDED.customer, price_per_kg=EXCLUDED.price_per_kg,
               amount=EXCLUDED.amount, user_name=EXCLUDED.user_name, status=EXCLUDED.status,
-              cancel_reason=EXCLUDED.cancel_reason, cancelled_ts=EXCLUDED.cancelled_ts, updated_at=now()
-         WHERE NOT EXISTS (
-              SELECT 1 FROM commands c
-              WHERE c.device = movements.device AND c.status = 'pending'
-                AND ((c.kind IN ('edit','cancel_movement') AND (c.payload->>'id')::int = movements.id)
-                  OR (c.kind = 'cancel_sale' AND movements.sale_id IS NOT NULL AND (c.payload->>'id')::int = movements.sale_id))
-         )`,
+              cancel_reason=EXCLUDED.cancel_reason, cancelled_ts=EXCLUDED.cancelled_ts, updated_at=now()`,
         [device, JSON.stringify(rows)]
       );
       // Автоматически пополняем справочник покупателей из поступивших продаж
-      await query(
-        `INSERT INTO customers(name)
-         SELECT DISTINCT trim(customer) FROM movements
-         WHERE device=$1 AND customer IS NOT NULL AND trim(customer) <> ''
-         ON CONFLICT DO NOTHING`,
-        [device]
-      );
+      const names = [...new Set(rows.map((r) => (r.customer || '').trim()).filter(Boolean))];
+      if (names.length) {
+        await query(`INSERT INTO customers(name) SELECT DISTINCT unnest($1::text[]) ON CONFLICT DO NOTHING`, [names]);
+      }
     }
     await query(
       `INSERT INTO devices (device,last_seen,crop,currency,grades,pending) VALUES ($1, now(), $2, $3, $4::jsonb, $5)
@@ -141,7 +186,7 @@ module.exports = async (req, res) => {
       ]
     );
 
-    // операции, которые ждут синхронизации с моноблоком; просрочка только через 30 дней
+    // Команды ждут моноблок; через 30 дней без ответа — expired. Облако их не применяло, поэтому откатывать нечего.
     await query(`UPDATE commands SET status='expired', result='не синхронизирована за 30 дней: моноблок не выходил на связь', done_ts=now()
                  WHERE device=$1 AND status='pending' AND ts < now() - interval '30 days'`, [device]);
     const commands = await query(
@@ -149,49 +194,57 @@ module.exports = async (req, res) => {
       [device]
     );
 
-    // Отправляем в Telegram только новые операции прихода и продажи с моноблока
+    const out = { ok: true, accepted: rows.length, commands };
+    // Справочник сортов сайта и переименования — моноблок добавит недостающие и переименует свои записи.
+    const gradeRows = await query(`SELECT name FROM grades WHERE active ORDER BY sort_order, id`);
+    out.grades = gradeRows.map((g) => g.name);
+    out.grade_aliases = aliasRows.map((a) => ({ old: a.old_name, new: a.new_name }));
+    // Зеркало веб-операций: только если моноблок его поддерживает (присылает web_cursor; пустая строка = с начала).
+    if (b.web_cursor !== undefined && b.web_cursor !== null) {
+      const mirror = await webMovementsSince(String(b.web_cursor));
+      out.web_movements = mirror.rows;
+      out.web_cursor = mirror.cursor;
+      out.web_more = mirror.more;
+    }
+
+    // Telegram: только новые приходы и продажи; продажа — одним сообщением, только если раньше её строк не было.
     if (newRows.length) {
       const cur = b.currency ? String(b.currency).slice(0, 20) : 'сум';
       const { byGrade } = await getStock().catch(() => ({ byGrade: {} }));
-      const intakes = newRows.filter((r) => r.type === 'in').slice(0, 10);
-      for (const r of intakes) {
-        await notifyIntake({
-          grade: r.grade,
-          net_kg: r.net_kg,
-          balance_kg: byGrade[r.grade],
-          user_name: r.user_name || '',
-          note: r.note || '',
-          source: device,
-        });
+      const jobs = [];
+      const intakes = newRows.filter((r) => r.type === 'in');
+      if (intakes.length > MAX_SINGLE_INTAKES) {
+        jobs.push((o) => notifyIntakeSummary({ rows: intakes, balances: byGrade, source: device }, o));
+      } else {
+        for (const r of intakes) {
+          jobs.push((o) => notifyIntake({ grade: r.grade, net_kg: r.net_kg, balance_kg: byGrade[r.grade], user_name: r.user_name || '', note: r.note || '', source: device }, o));
+        }
       }
       const salesMap = new Map();
       for (const r of newRows.filter((x) => x.type === 'out')) {
+        if (r.sale_id && knownSales.has(r.sale_id)) continue; // продажа уже была (частично) принята раньше — сообщение уже ушло
         const key = r.sale_id ? `s:${r.sale_id}` : `m:${r.id}`;
         if (!salesMap.has(key)) {
-          salesMap.set(key, {
-            sale_id: r.sale_id || r.id,
-            customer: r.customer || '—',
-            user_name: r.user_name || '',
-            note: r.note || '',
-            items: [],
-            total_kg: 0,
-            total_amount: 0,
-          });
+          salesMap.set(key, { sale_id: r.sale_id || r.id, customer: r.customer || '—', user_name: r.user_name || '', note: r.note || '', items: [], total_kg: 0, total_amount: 0 });
         }
         const s = salesMap.get(key);
         s.items.push({ grade: r.grade, net_kg: r.net_kg, price_per_kg: r.price_per_kg, amount: r.amount });
         s.total_kg = Math.round((s.total_kg + Number(r.net_kg || 0)) * 1000) / 1000;
         s.total_amount = Math.round((s.total_amount + Number(r.amount || 0)) * 100) / 100;
       }
-      for (const s of [...salesMap.values()].slice(0, 10)) {
-        await notifySale({ ...s, currency: cur, source: device });
+      const sales = [...salesMap.values()];
+      for (const s of sales.slice(0, MAX_SALE_MESSAGES)) jobs.push((o) => notifySale({ ...s, currency: cur, source: device }, o));
+      if (sales.length > MAX_SALE_MESSAGES) {
+        const rest = sales.slice(MAX_SALE_MESSAGES);
+        jobs.push((o) => notifySalesSummary({ sales: rest, currency: cur, source: device }, o));
       }
+      await sendMany(jobs, TG_BUDGET_MS);
     }
 
-    res.status(200).json({ ok: true, accepted: rows.length, commands });
+    res.status(200).json(out);
   } catch (e) {
     if (e.status === 400) return res.status(400).json({ error: e.message });
-    console.error(e);
+    logError('ingest', e);
     res.status(500).json({ error: 'внутренняя ошибка' });
   }
 };

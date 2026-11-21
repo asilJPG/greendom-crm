@@ -1,5 +1,6 @@
 // Модуль «Расходы»: полноценный документ «Акт расхода» на отдельной странице (как в iiko / 1С) + категории.
-import { api, errMsg } from './api.js';
+import { api, errMsg, newRequestId } from './api.js';
+import { parseDecimal, round2 } from './num.js';
 import { editBtnHtml, openEntityModal } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -11,7 +12,10 @@ const dm = (s) => (s && s.length >= 10 ? s.slice(8, 10) + '.' + s.slice(5, 7) + 
 const PAY_LABEL = { cash: 'Наличные', card: 'Карта', transfer: 'Перечисление' };
 const UNITS = ['шт', 'кг', 'л', 'усл', 'час', 'м', 'уп'];
 
-let deps = { me: () => null, cur: () => 'сум', crop: () => 'Клубника', toast: () => {}, askText: async () => null };
+let deps = { me: () => null, today: () => iso(new Date()), cur: () => 'сум', crop: () => 'Клубника', toast: () => {}, askText: async () => null };
+let actReqId = newRequestId(); // request_id формы нового акта: один на форму, новый после успеха
+const isAdmin = () => { const me = deps.me(); return !!me && me.role === 'admin'; };
+const todayStr = () => (deps.today ? deps.today() : iso(new Date()));
 let categories = [];
 let loadedItems = [];
 let payMethod = 'cash';
@@ -27,7 +31,7 @@ function showExpView(mode) {
 }
 
 function setDefaultPeriod() {
-  const today = iso(new Date());
+  const today = todayStr();
   if (!$('e-from').value) {
     $('e-from').value = today.slice(0, 8) + '01';
     $('e-to').value = today;
@@ -91,9 +95,13 @@ function renderCategoryModal() {
 }
 
 /* ───── Табличная часть документа «Новый акт расхода» ───── */
+// Значения строк храним как введённый текст ('1,5'), числа получаем через parseDecimal
+const lineNum = (v) => { const n = parseDecimal(v); return n === null ? 0 : n; };
+
 function recalcDraftTotal() {
-  const total = draftLines.reduce((a, l) => a + (Number(l.sum) || 0), 0);
-  $('exp-doc-total').textContent = `${money(total)} ${deps.cur()}`;
+  const bad = draftLines.some((l) => [l.qty, l.price, l.sum].some((v) => Number.isNaN(parseDecimal(v))));
+  const total = round2(draftLines.reduce((a, l) => a + (Number.isNaN(lineNum(l.sum)) ? 0 : lineNum(l.sum)), 0));
+  $('exp-doc-total').textContent = bad ? 'проверьте числа' : `${money(total)} ${deps.cur()}`;
 }
 
 function renderDraftLines() {
@@ -102,10 +110,10 @@ function renderDraftLines() {
     <div class="doc-line" data-li="${idx}">
       <input class="dl-name" data-f="name" value="${esc(l.name)}" placeholder="Наименование услуги или товара">
       <div class="dl-nums">
-        <input class="dl-qty" data-f="qty" type="number" inputmode="decimal" min="0" step="any" value="${l.qty}" placeholder="Кол-во" aria-label="Количество">
+        <input class="dl-qty" data-f="qty" type="text" inputmode="decimal" autocomplete="off" value="${esc(l.qty)}" placeholder="Кол-во" aria-label="Количество">
         <select class="dl-unit" data-f="unit" aria-label="Ед. изм.">${UNITS.map((u) => `<option value="${u}"${l.unit === u ? ' selected' : ''}>${u}</option>`).join('')}</select>
-        <input class="dl-price" data-f="price" type="number" inputmode="decimal" min="0" step="any" value="${l.price === '' ? '' : l.price}" placeholder="Цена" aria-label="Цена">
-        <input class="dl-sum" data-f="sum" type="number" inputmode="decimal" min="0" step="any" value="${l.sum === '' ? '' : l.sum}" placeholder="Сумма" aria-label="Сумма">
+        <input class="dl-price" data-f="price" type="text" inputmode="decimal" autocomplete="off" value="${esc(l.price)}" placeholder="Цена" aria-label="Цена">
+        <input class="dl-sum" data-f="sum" type="text" inputmode="decimal" autocomplete="off" value="${esc(l.sum)}" placeholder="Сумма" aria-label="Сумма">
         ${draftLines.length > 1 ? `<button type="button" class="row-act-btn" data-rm="${idx}" aria-label="Убрать строку" title="Убрать строку">×</button>` : ''}
       </div>
     </div>`).join('');
@@ -120,15 +128,18 @@ function renderDraftLines() {
         if (f === 'name' || f === 'unit') {
           line[f] = inp.value;
         } else if (f === 'qty' || f === 'price') {
-          line[f] = inp.value === '' ? '' : Number(inp.value);
-          const q = Number(line.qty || 0);
-          const p = Number(line.price || 0);
-          if (q > 0 && p >= 0 && line.price !== '') {
-            line.sum = Math.round(q * p * 100) / 100;
+          line[f] = inp.value;
+          const q = parseDecimal(line.qty);
+          const p = parseDecimal(line.price);
+          inp.classList.toggle('bad-input', Number.isNaN(parseDecimal(inp.value)));
+          if (typeof q === 'number' && typeof p === 'number' && Number.isFinite(q) && Number.isFinite(p) && q > 0 && p >= 0) {
+            line.sum = String(round2(q * p));
             sumEl.value = line.sum;
+            sumEl.classList.remove('bad-input');
           }
         } else if (f === 'sum') {
-          line.sum = inp.value === '' ? '' : Number(inp.value);
+          line.sum = inp.value;
+          inp.classList.toggle('bad-input', Number.isNaN(parseDecimal(inp.value)));
         }
         recalcDraftTotal();
       };
@@ -150,12 +161,12 @@ function openNewActPage() {
   $('exp-form-title').textContent = 'Новый акт расхода';
   $('exp-save').textContent = 'Провести акт расхода';
   $('exp-err').textContent = '';
-  $('exp-date').value = iso(new Date());
+  $('exp-date').value = todayStr();
   $('exp-docno').value = '';
   $('exp-cp').value = '';
   $('exp-comment').value = '';
   document.querySelectorAll('#exp-pay-chips .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
-  draftLines = [{ name: '', qty: 1, unit: 'усл', price: '', sum: '' }];
+  draftLines = [{ name: '', qty: '1', unit: 'усл', price: '', sum: '' }];
   renderDraftLines();
   showExpView('new');
   $('exp-cp').focus();
@@ -167,7 +178,7 @@ function openEditActPage(x) {
   $('exp-form-title').textContent = `Редактирование акта №${x.id}`;
   $('exp-save').textContent = 'Сохранить изменения';
   $('exp-err').textContent = '';
-  $('exp-date').value = x.doc_date || iso(new Date());
+  $('exp-date').value = x.doc_date || todayStr();
   $('exp-docno').value = x.doc_number || '';
   $('exp-cat').value = String(x.category_id);
   $('exp-cp').value = x.counterparty || '';
@@ -175,8 +186,8 @@ function openEditActPage(x) {
   document.querySelectorAll('#exp-pay-chips .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
   const items = Array.isArray(x.items) && x.items.length ? x.items : null;
   draftLines = items
-    ? items.map((it) => ({ name: it.name || '', qty: it.qty ?? 1, unit: it.unit || 'шт', price: it.price ?? '', sum: it.sum ?? '' }))
-    : [{ name: x.comment || x.category_name || '', qty: 1, unit: 'усл', price: x.amount, sum: x.amount }];
+    ? items.map((it) => ({ name: it.name || '', qty: String(it.qty ?? 1), unit: it.unit || 'шт', price: it.price == null || it.price === '' ? '' : String(it.price), sum: it.sum == null ? '' : String(it.sum) }))
+    : [{ name: x.comment || x.category_name || '', qty: '1', unit: 'усл', price: String(x.amount ?? ''), sum: String(x.amount ?? '') }];
   renderDraftLines();
   showExpView('new');
   $('exp-cp').focus();
@@ -232,10 +243,9 @@ function buildActSheetHtml(x) {
 
 function openActViewPage(x) {
   viewingAct = x;
-  const me = deps.me();
-  const today = iso(new Date());
-  const canEdit = x.status === 'active' && me && (me.role === 'admin' || me.role === 'director');
-  const canCancel = x.status === 'active' && me && (me.role === 'admin' || (me.role === 'director' && x.user_name === me.name && x.doc_date === today));
+  // Директор — только просмотр; создавать, менять и отменять акты может только администратор
+  const canEdit = x.status === 'active' && isAdmin();
+  const canCancel = x.status === 'active' && isAdmin();
   $('ev-title').textContent = `Акт расхода №${x.id}`;
   $('ev-sheet').innerHTML = buildActSheetHtml(x);
   $('ev-edit-btn').hidden = !canEdit;
@@ -259,10 +269,9 @@ export async function openExpenseById(id) {
 export async function loadExpenses() {
   showExpView('list');
   setDefaultPeriod();
-  const me = deps.me();
   const cur = deps.cur();
-  $('e-open-add').hidden = !(me && (me.role === 'admin' || me.role === 'director'));
-  $('e-open-cats').hidden = !(me && me.role === 'admin');
+  $('e-open-add').hidden = !isAdmin();
+  $('e-open-cats').hidden = !isAdmin();
 
   const qs = new URLSearchParams({ resource: 'expenses', from: $('e-from').value, to: $('e-to').value });
   if ($('e-cat-filter').value) qs.set('category_id', $('e-cat-filter').value);
@@ -316,8 +325,8 @@ export function initExpenses(config) {
 
   document.querySelectorAll('[data-erange]').forEach((b) => {
     b.onclick = () => {
-      const now = new Date();
-      const today = iso(now);
+      const today = todayStr();
+      const now = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)));
       if (b.dataset.erange === 'month') {
         $('e-from').value = today.slice(0, 8) + '01';
         $('e-to').value = today;
@@ -336,11 +345,11 @@ export function initExpenses(config) {
   $('e-cat-filter').onchange = loadExpenses;
 
   // Страница создания акта
-  $('e-open-add').onclick = openNewActPage;
+  $('e-open-add').onclick = () => { if (isAdmin()) openNewActPage(); };
   $('exp-back').onclick = () => showExpView('list');
   $('exp-cancel').onclick = () => showExpView('list');
   $('exp-add-line').onclick = () => {
-    draftLines.push({ name: '', qty: 1, unit: 'шт', price: '', sum: '' });
+    draftLines.push({ name: '', qty: '1', unit: 'шт', price: '', sum: '' });
     renderDraftLines();
   };
   $('exp-pay-chips').onclick = (e) => {
@@ -351,14 +360,27 @@ export function initExpenses(config) {
   };
   $('exp-save').onclick = async () => {
     const b = $('exp-save');
-    const items = draftLines
-      .map((l) => ({ name: (l.name || '').trim(), qty: Number(l.qty || 1), unit: l.unit || 'шт', price: Number(l.price || 0), sum: Number(l.sum || 0) }))
-      .filter((l) => l.name || l.sum > 0);
-    const total = items.reduce((a, l) => a + l.sum, 0);
+    if (b.disabled) return;
+    if (!isAdmin()) { $('exp-err').textContent = 'Проводить акты расхода может только администратор'; return; }
+    const items = [];
+    for (let i = 0; i < draftLines.length; i++) {
+      const l = draftLines[i];
+      const name = (l.name || '').trim();
+      const qty = parseDecimal(l.qty);
+      const price = parseDecimal(l.price);
+      const sum = parseDecimal(l.sum);
+      if (!name && (sum === null || sum === 0) && (price === null || price === 0)) continue; // пустая строка
+      const bad = [['Кол-во', qty], ['Цена', price], ['Сумма', sum]].find(([, v]) => Number.isNaN(v) || (typeof v === 'number' && v < 0));
+      if (bad) { $('exp-err').textContent = `Строка ${i + 1}: неверное значение «${bad[0]}». Пример: 1,5 или 1.5`; return; }
+      items.push({ name, qty: qty === null ? 1 : qty, unit: l.unit || 'шт', price: price === null ? 0 : round2(price), sum: sum === null ? 0 : round2(sum) });
+    }
+    const total = round2(items.reduce((a, l) => a + l.sum, 0));
     if (!items.length || total <= 0) {
       $('exp-err').textContent = 'Заполните хотя бы одну позицию с суммой больше 0';
       return;
     }
+    if (!$('exp-cat').value) { $('exp-err').textContent = 'Выберите категорию расхода'; return; }
+    $('exp-err').textContent = '';
     b.disabled = true;
     try {
       const payload = {
@@ -374,9 +396,12 @@ export function initExpenses(config) {
       };
       const r = editingActId
         ? await api('PATCH', '/api/report?resource=expenses', { ...payload, id: editingActId, action: 'edit' })
-        : await api('POST', '/api/report?resource=expenses', payload);
+        : await api('POST', '/api/report?resource=expenses', { ...payload, request_id: actReqId });
       if (!r.ok) { $('exp-err').textContent = errMsg(r); return; }
-      deps.toast(editingActId ? `Акт №${editingActId} обновлён` : `Акт расхода №${r.data.id} проведён`);
+      if (!editingActId) actReqId = newRequestId();
+      deps.toast(editingActId
+        ? `Акт №${editingActId} обновлён`
+        : r.data && r.data.duplicate ? 'Этот акт уже был проведён' : `Акт расхода №${r.data && r.data.id} проведён`);
       await loadExpenses();
     } finally {
       b.disabled = false;
@@ -385,19 +410,25 @@ export function initExpenses(config) {
 
   // Страница просмотра акта
   $('ev-back').onclick = () => showExpView('list');
-  $('ev-edit-btn').onclick = () => { if (viewingAct) openEditActPage(viewingAct); };
+  $('ev-edit-btn').onclick = () => { if (viewingAct && isAdmin()) openEditActPage(viewingAct); };
   $('ev-print').onclick = () => {
     if (!viewingAct) return;
     $('print-root').innerHTML = buildActSheetHtml(viewingAct);
     window.print();
   };
   $('ev-cancel-btn').onclick = async () => {
-    if (!viewingAct) return;
+    const b = $('ev-cancel-btn');
+    if (!viewingAct || b.disabled) return;
     const reason = await deps.askText({ title: `Отменить акт №${viewingAct.id}`, label: 'Причина отмены', placeholder: 'Укажите причину', okText: 'Отменить акт' });
     if (!reason) return;
-    const r = await api('PATCH', '/api/report?resource=expenses', { target: 'expense', id: viewingAct.id, reason });
-    deps.toast(r.ok ? 'Акт отменён' : errMsg(r), !r.ok);
-    if (r.ok) await loadExpenses();
+    b.disabled = true;
+    try {
+      const r = await api('PATCH', '/api/report?resource=expenses', { target: 'expense', id: viewingAct.id, reason });
+      deps.toast(r.ok ? 'Акт отменён' : errMsg(r), !r.ok);
+      if (r.ok) await loadExpenses();
+    } finally {
+      b.disabled = false;
+    }
   };
 
   // Категории расходов (компактная модалка, т.к. 1 поле)
@@ -409,7 +440,15 @@ export function initExpenses(config) {
   };
   $('exp-cat-close').onclick = () => $('exp-cat-dlg').close();
   $('exp-cat-add').onclick = async () => {
-    const r = await api('POST', '/api/report?resource=expenses', { target: 'category', name: $('exp-cat-new').value });
+    const b = $('exp-cat-add');
+    if (b.disabled) return;
+    b.disabled = true;
+    let r;
+    try {
+      r = await api('POST', '/api/report?resource=expenses', { target: 'category', name: $('exp-cat-new').value });
+    } finally {
+      b.disabled = false;
+    }
     if (!r.ok) { $('exp-cat-err').textContent = errMsg(r); return; }
     $('exp-cat-err').textContent = '';
     $('exp-cat-new').value = '';

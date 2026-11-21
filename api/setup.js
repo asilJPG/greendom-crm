@@ -1,10 +1,15 @@
 // Первичная настройка: создаёт первого администратора. Работает только пока в базе нет ни одного пользователя
 // и только с одноразовым ключом установки (SETUP_KEY из настроек проекта).
-const { query, ensureSchema } = require('../lib/db');
-const { safeEqual, hashPassword, encryptPassword, clientIp, audit } = require('../lib/auth');
+const { query, transaction, ensureSchema } = require('../lib/db');
+const { checkOrigin, logError } = require('../lib/http');
+const { safeEqual, hashPassword, encryptPassword, clientIp } = require('../lib/auth');
+
+// Ключ блокировки первичной настройки: параллельные запросы выполняются по очереди.
+const SETUP_LOCK = 774202;
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'только POST' });
+  if (!checkOrigin(req)) return res.status(403).json({ error: 'недопустимый источник запроса' });
   try {
     await ensureSchema();
     const ip = clientIp(req);
@@ -23,19 +28,32 @@ module.exports = async (req, res) => {
     if (users > 0) return res.status(409).json({ error: 'Первичная настройка уже выполнена' });
     const name = String(b.name || '').trim();
     const password = String(b.password || '');
-    const temporary = Boolean(b.temporary); // true: при первом входе сайт потребует сменить пароль
+    // Самостоятельной смены пароля больше нет: пароли задаёт только администратор и они постоянные,
+    // поэтому флаг temporary игнорируется, must_change всегда false.
     if (name.length < 2 || name.length > 40) return res.status(400).json({ error: 'Имя: от 2 до 40 символов' });
     // Держатель SETUP_KEY (владелец) вправе задать и короткий пароль первому админу; все остальные пароли
-    // (смена, создание пользователей) проходят через MIN_PASSWORD в password.js / users.js.
+    // (создание пользователей и сброс админом) проходят через MIN_PASSWORD в users.js.
     if (password.length < 4) return res.status(400).json({ error: 'Пароль слишком короткий (минимум 4 символа)' });
-    await query(
-      `INSERT INTO app_users(name, role, pass_hash, pass_enc, must_change) VALUES ($1, 'admin', $2, $3, $4)`,
-      [name, hashPassword(password), encryptPassword(password), temporary]
-    );
-    await audit(req, name, 'setup', 'создан первый администратор');
-    res.status(200).json({ ok: true, name, must_change: temporary });
+    // Проверка «пользователей ещё нет», создание админа и запись в журнал — одной транзакцией под блокировкой:
+    // из двух одновременных запросов админа создаст только один, второй получит 409.
+    const out = await transaction([
+      [`SELECT pg_advisory_xact_lock(${SETUP_LOCK})`, []],
+      [
+        `WITH ins AS (
+           INSERT INTO app_users(name, role, pass_hash, pass_enc, must_change)
+           SELECT $1::text, 'admin', $2::text, $3::text, false
+           WHERE NOT EXISTS (SELECT 1 FROM app_users)
+           RETURNING id),
+         a AS (INSERT INTO audit_log(user_name, action, detail, ip)
+               SELECT $1::text, 'setup', 'создан первый администратор', $4::text FROM ins RETURNING id)
+         SELECT count(*)::int AS n FROM ins`,
+        [name, hashPassword(password), encryptPassword(password), ip],
+      ],
+    ]);
+    if (!out[1][0].n) return res.status(409).json({ error: 'Первичная настройка уже выполнена' });
+    res.status(200).json({ ok: true, name, must_change: false });
   } catch (e) {
-    console.error(e);
+    logError('setup', e);
     res.status(500).json({ error: 'внутренняя ошибка' });
   }
 };

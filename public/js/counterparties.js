@@ -1,5 +1,6 @@
 // Модуль «Контрагенты и Акт сверки»: список контрагентов и полноценная CRM-страница контрагента (Акт сверки / Оплаты / Реквизиты).
-import { api, errMsg } from './api.js';
+import { api, errMsg, newRequestId } from './api.js';
+import { readDecimal, round2 } from './num.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -14,7 +15,7 @@ const KIND_LABEL = {
   both: 'Покупатель / Поставщик',
 };
 
-let deps = { cur: () => 'сум', crop: () => 'Клубника', toast: () => {}, askText: async () => null, onRefsChanged: async () => {} };
+let deps = { me: () => null, cur: () => 'сум', crop: () => 'Клубника', toast: () => {}, askText: async () => null, onRefsChanged: async () => {} };
 let rows = [];
 let kindFilter = '';
 let currentCp = null; // null = новый контрагент
@@ -22,6 +23,25 @@ let detailTab = 'rec'; // rec | pay | crm
 let payDir = 'in';
 let payMethod = 'cash';
 let lastRec = null;
+let payReqId = newRequestId(); // request_id формы оплаты: один на форму, новый после успеха
+let cpReqId = newRequestId(); // request_id создания контрагента
+const isAdmin = () => { const me = deps.me && deps.me(); return !!me && me.role === 'admin'; };
+const CRM_FIELDS = ['cp-f-name', 'cp-f-kind', 'cp-f-inn', 'cp-f-contact', 'cp-f-phone', 'cp-f-tg', 'cp-f-addr', 'cp-f-terms', 'cp-f-bank', 'cp-f-note'];
+
+// Директор — только просмотр: прячем создание, оплаты, отмены и сохранение карточки
+function applyRolePerms() {
+  const admin = isAdmin();
+  $('cp-open-add').hidden = !admin;
+  const payTabBtn = document.querySelector('#cp-detail-tabs [data-cpt="pay"]');
+  if (payTabBtn) payTabBtn.hidden = !admin;
+  $('cp-f-save').hidden = !admin;
+  CRM_FIELDS.forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    if (el.tagName === 'SELECT') el.disabled = !admin;
+    else el.readOnly = !admin;
+  });
+}
 
 function showCpView(mode) {
   $('cp-list-view').hidden = mode !== 'list';
@@ -119,6 +139,7 @@ export async function loadCounterparties(keepCpId = null) {
   const r = await api('GET', '/api/report?resource=reconcile');
   if (!r.ok) return;
   rows = r.data.counterparties || [];
+  applyRolePerms();
   renderList();
   if (keepCpId) {
     const updated = rows.find((x) => x.id === keepCpId);
@@ -132,6 +153,7 @@ export async function loadCounterparties(keepCpId = null) {
 
 /* ───── Полноценная страница карточки контрагента ───── */
 function switchDetailTab(tab) {
+  if (tab === 'pay' && !isAdmin()) tab = 'rec';
   detailTab = tab;
   document.querySelectorAll('#cp-detail-tabs button').forEach((b) => b.classList.toggle('sel', b.dataset.cpt === tab));
   $('cp-tab-rec').hidden = tab !== 'rec';
@@ -163,8 +185,9 @@ function openCpDetail(c = null, tab = 'rec') {
   $('cp-f-note').value = c ? (c.note || '') : '';
   $('cp-f-err').textContent = '';
 
+  applyRolePerms();
   const tog = $('cp-f-toggle');
-  tog.hidden = !c;
+  tog.hidden = !c || !isAdmin();
   if (c) {
     tog.textContent = c.active ? 'Скрыть контрагента' : 'Вернуть в список';
     tog.className = c.active ? 'btn ghost danger' : 'btn ghost';
@@ -198,7 +221,7 @@ function buildRecHtml(d) {
   const cur = deps.cur();
   const cp = d.counterparty || currentCp || { name: '' };
   const docRows = (d.docs || []).map((x) => {
-    const canCancel = x.type === 'payment_in' || x.type === 'payment_out';
+    const canCancel = isAdmin() && (x.type === 'payment_in' || x.type === 'payment_out');
     return `
       <tr>
         <td style="white-space:nowrap">${dm(x.date)}</td>
@@ -274,9 +297,15 @@ async function fetchReconcile() {
     b.onclick = async () => {
       const reason = await deps.askText({ title: `Отменить оплату №${b.dataset.cancelPay}`, label: 'Причина отмены', placeholder: 'Укажите причину', okText: 'Отменить' });
       if (!reason) return;
-      const r2 = await api('PATCH', '/api/report?resource=payments', { id: Number(b.dataset.cancelPay), reason });
-      deps.toast(r2.ok ? 'Оплата отменена' : errMsg(r2), !r2.ok);
-      if (r2.ok) await loadCounterparties(currentCp.id);
+      if (b.disabled) return;
+      b.disabled = true;
+      try {
+        const r2 = await api('PATCH', '/api/report?resource=payments', { id: Number(b.dataset.cancelPay), reason });
+        deps.toast(r2.ok ? 'Оплата отменена' : errMsg(r2), !r2.ok);
+        if (r2.ok) await loadCounterparties(currentCp.id);
+      } finally {
+        b.disabled = false;
+      }
     };
   });
 }
@@ -397,7 +426,7 @@ export function initCounterparties(config) {
     renderList();
   };
   $('cp-search').oninput = renderList;
-  $('cp-open-add').onclick = () => openCpDetail(null, 'crm');
+  $('cp-open-add').onclick = () => { if (isAdmin()) openCpDetail(null, 'crm'); };
   $('cp-back').onclick = () => showCpView('list');
 
   $('cp-detail-tabs').onclick = (e) => {
@@ -408,8 +437,9 @@ export function initCounterparties(config) {
 
   // Сохранение CRM-карточки контрагента
   $('cp-f-toggle').onclick = async () => {
-    if (!currentCp) return;
+    if (!currentCp || !isAdmin()) return;
     const b = $('cp-f-toggle');
+    if (b.disabled) return;
     b.disabled = true;
     try {
       const r = await api('PATCH', '/api/status?resource=refs', { target: 'customer', id: currentCp.id, active: !currentCp.active });
@@ -424,6 +454,7 @@ export function initCounterparties(config) {
 
   $('cp-f-save').onclick = async () => {
     const b = $('cp-f-save');
+    if (b.disabled || !isAdmin()) return;
     b.disabled = true;
     try {
       const payload = {
@@ -441,9 +472,10 @@ export function initCounterparties(config) {
       };
       const r = currentCp
         ? await api('PATCH', '/api/status?resource=refs', { ...payload, id: currentCp.id })
-        : await api('POST', '/api/status?resource=refs', payload);
+        : await api('POST', '/api/status?resource=refs', { ...payload, request_id: cpReqId });
       if (!r.ok) { $('cp-f-err').textContent = errMsg(r); return; }
-      deps.toast(currentCp ? 'Карточка сохранена' : 'Контрагент добавлен');
+      if (!currentCp) cpReqId = newRequestId();
+      deps.toast(currentCp ? 'Карточка сохранена' : r.data && r.data.duplicate ? 'Контрагент уже был добавлен' : 'Контрагент добавлен');
       await deps.onRefsChanged();
       await loadCounterparties(currentCp ? currentCp.id : r.data.customer?.id);
     } finally {
@@ -467,18 +499,25 @@ export function initCounterparties(config) {
   $('pay-save').onclick = async () => {
     if (!currentCp) return;
     const b = $('pay-save');
+    if (b.disabled) return;
+    if (!isAdmin()) { $('pay-err').textContent = 'Проводить оплаты может только администратор'; return; }
+    const amt = readDecimal('pay-amt', { label: 'Сумма', positive: true, max: 1e13 });
+    if (!amt.ok) { $('pay-err').textContent = amt.error; $('pay-amt').focus(); return; }
+    $('pay-err').textContent = '';
     b.disabled = true;
     try {
       const r = await api('POST', '/api/report?resource=payments', {
         doc_date: $('pay-date').value,
         counterparty: currentCp.name,
         direction: payDir,
-        amount: $('pay-amt').value,
+        amount: round2(amt.value),
         payment_method: payMethod,
         comment: $('pay-comment').value,
+        request_id: payReqId,
       });
       if (!r.ok) { $('pay-err').textContent = errMsg(r); return; }
-      deps.toast('Оплата проведена');
+      payReqId = newRequestId();
+      deps.toast(r.data && r.data.duplicate ? 'Эта оплата уже была проведена' : 'Оплата проведена');
       detailTab = 'rec';
       await loadCounterparties(currentCp.id);
     } finally {

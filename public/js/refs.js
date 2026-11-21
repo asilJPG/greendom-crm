@@ -1,16 +1,22 @@
 // Модуль «Справочники» (/refs): управление сортами и покупателями (без хардкода).
-import { api, errMsg } from './api.js';
+import { api, errMsg, newRequestId } from './api.js';
 import { editBtnHtml, openEntityModal } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-let deps = { toast: () => {}, gradeColor: () => '#1b1b1b', onRefsChanged: () => {} };
+let deps = { me: () => null, toast: () => {}, gradeColor: () => '#1b1b1b', onRefsChanged: () => {} };
+let custReqId = newRequestId(); // request_id добавления покупателя: новый после успеха
+const isAdmin = () => { const me = deps.me && deps.me(); return !!me && me.role === 'admin'; };
 
 export async function loadRefs() {
   const r = await api('GET', '/api/status?resource=refs');
   if (!r.ok) return;
   const { grades = [], customers = [] } = r.data;
+  const admin = isAdmin();
+  // Добавление и правка справочников — только администратор
+  $('ref-g-name').closest('.wrow').hidden = !admin;
+  $('ref-c-add').closest('.stack').hidden = !admin;
 
   $('ref-grades').innerHTML = grades.map((g) => `
     <li class="li li-edit${g.active ? '' : ' off'}" data-edit-grade="${g.id}">
@@ -21,11 +27,12 @@ export async function loadRefs() {
           ${g.active ? '' : '<span class="badge b-off">Скрыт</span>'}
         </div>
       </div>
-      ${editBtnHtml(`data-edit-grade="${g.id}"`, 'Редактировать сорт')}
+      ${admin ? editBtnHtml(`data-edit-grade="${g.id}"`, 'Редактировать сорт') : ''}
     </li>`).join('') || '<div class="empty">Сортов нет</div>';
 
   $('ref-grades').querySelectorAll('li[data-edit-grade]').forEach((li) => {
     li.onclick = () => {
+      if (!admin) return;
       const g = grades.find((x) => String(x.id) === li.dataset.editGrade);
       if (!g) return;
       openEntityModal({
@@ -64,11 +71,12 @@ export async function loadRefs() {
         </div>
         ${c.phone || c.note ? `<div class="s">${[c.phone, c.note].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
       </div>
-      ${editBtnHtml(`data-edit-cust="${c.id}"`, 'Редактировать покупателя')}
+      ${admin ? editBtnHtml(`data-edit-cust="${c.id}"`, 'Редактировать покупателя') : ''}
     </li>`).join('') || '<div class="empty">Покупателей пока нет</div>';
 
   $('ref-customers').querySelectorAll('li[data-edit-cust]').forEach((li) => {
     li.onclick = () => {
+      if (!admin) return;
       const c = customers.find((x) => String(x.id) === li.dataset.editCust);
       if (!c) return;
       openEntityModal({
@@ -102,27 +110,35 @@ export async function loadRefs() {
   });
 }
 
+async function withBtn(b, fn) {
+  if (b.disabled) return;
+  b.disabled = true;
+  try { await fn(); } finally { b.disabled = false; }
+}
+
 export function initRefs(config) {
   deps = config;
-  $('ref-g-add').onclick = async () => {
+  $('ref-g-add').onclick = () => withBtn($('ref-g-add'), async () => {
     const r = await api('POST', '/api/status?resource=refs', { target: 'grade', name: $('ref-g-name').value });
     if (!r.ok) { deps.toast(errMsg(r), true); return; }
     $('ref-g-name').value = '';
     deps.toast('Сорт добавлен');
     await loadRefs();
     deps.onRefsChanged();
-  };
-  $('ref-c-add').onclick = async () => {
+  });
+  $('ref-c-add').onclick = () => withBtn($('ref-c-add'), async () => {
     const r = await api('POST', '/api/status?resource=refs', {
       target: 'customer',
       name: $('ref-c-name').value,
       phone: $('ref-c-phone').value,
+      request_id: custReqId,
     });
     if (!r.ok) { deps.toast(errMsg(r), true); return; }
+    custReqId = newRequestId();
     $('ref-c-name').value = '';
     $('ref-c-phone').value = '';
-    deps.toast('Покупатель добавлен');
+    deps.toast(r.data && r.data.duplicate ? 'Покупатель уже был добавлен' : 'Покупатель добавлен');
     await loadRefs();
     deps.onRefsChanged();
-  };
+  });
 }

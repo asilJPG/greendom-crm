@@ -48,18 +48,6 @@
   </div>
 </div>
 
-<div class="center" id="force" hidden>
-  <div class="brand2"><span class="mark"><svg><use href="#leaf"/></svg></span><div><div class="tt">Новый пароль</div><div class="st">Пароль был временным</div></div></div>
-  <div class="card">
-    <div class="sub">Придумайте свой пароль, не короче 6 символов.</div>
-    <div class="field"><input id="fc-old" type="password" placeholder="Временный пароль" autocomplete="current-password"></div>
-    <div class="field"><input id="fc-new" type="password" placeholder="Новый пароль" autocomplete="new-password"></div>
-    <div class="field"><input id="fc-new2" type="password" placeholder="Повторите новый пароль" autocomplete="new-password"></div>
-    <button class="btn block" id="fc-go">Сохранить</button>
-    <div class="err" id="fc-err" style="margin-top:10px"></div>
-  </div>
-</div>
-
 <div id="app" hidden>
   <header class="topbar">
     <div class="brand"><span class="mark"><svg><use href="#leaf"/></svg></span><span id="title">Склад</span></div>
@@ -143,11 +131,11 @@
             <div class="sc-stat" id="sc-stat">Ручной ввод веса</div>
             <div class="sc-manual-box" id="sc-manual-box">
               <label class="f" for="sc-manual-in">Вес нетто, кг</label>
-              <input id="sc-manual-in" type="number" inputmode="decimal" step="0.001" min="0" placeholder="0.000">
+              <input id="sc-manual-in" type="text" inputmode="decimal" autocomplete="off" placeholder="0.000">
             </div>
             <div class="sc-meta">
               <span>Брутто на весах</span><b id="sc-gross">—</b>
-              <label for="tare-g">Тара (пустой ящик), г</label><input id="tare-g" type="number" inputmode="decimal" min="0" placeholder="0">
+              <label for="tare-g">Тара (пустой ящик), г</label><input id="tare-g" type="text" inputmode="decimal" autocomplete="off" placeholder="0">
             </div>
             <div class="acts" style="margin-top:12px">
               <button class="btn sec sm" id="sc-conn">Подключить весы</button>
@@ -180,9 +168,10 @@
               </div>
               <div><label class="f">Сорт позиции</label><div class="grade-grid" id="sl-grades"></div></div>
               <div class="daterow">
-                <div><label class="f" for="sl-price">Цена за кг</label><input id="sl-price" type="number" inputmode="decimal" min="0" placeholder="0"></div>
-                <div><label class="f" for="sl-amt-ov">Сумма (авто или вручную)</label><input id="sl-amt-ov" type="number" inputmode="decimal" min="0" placeholder="авто"></div>
+                <div><label class="f" for="sl-price">Цена за кг</label><input id="sl-price" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div>
+                <div><label class="f" for="sl-amt-ov">Сумма (авто или вручную)</label><input id="sl-amt-ov" type="text" inputmode="decimal" autocomplete="off" placeholder="авто"></div>
               </div>
+              <div class="small" id="sl-live" aria-live="polite" style="min-height:18px"></div>
               <button class="btn sec block touch" type="button" id="sl-add-pos">+ Взвесить и добавить позицию</button>
               <div class="stack" id="sl-cart"></div>
               <input id="sl-note" placeholder="Заметка к продаже (необязательно)">
@@ -220,7 +209,7 @@
       <div class="page-head">
         <div>
           <h1 class="page">Очередь</h1>
-          <p class="sub">Операции и правки с сайта. Изменения применяются на сайте сразу, а моноблок подтягивает их при выходе на связь.</p>
+          <p class="sub">Операции и правки с сайта. Приход, продажа и списание с сайта применяются сразу. Исправления и отмены записей моноблока ждут склад: статус «ждёт склад» сменится на «выполнено», когда моноблок их применит.</p>
         </div>
         <button class="btn" id="q-apply" hidden>Применить ожидающие в БД</button>
       </div>
@@ -337,7 +326,7 @@
         <div class="card stack">
           <div class="daterow">
             <div><label class="f" for="inv-f-date">Дата вложения</label><input id="inv-f-date" type="date"></div>
-            <div><label class="f" for="inv-f-amt">Сумма</label><input id="inv-f-amt" type="number" inputmode="decimal" min="0" placeholder="0"></div>
+            <div><label class="f" for="inv-f-amt">Сумма</label><input id="inv-f-amt" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div>
           </div>
           <div><label class="f" for="inv-f-title">Наименование вложения</label><input id="inv-f-title" placeholder="Напр. Монтаж системы капельного полива, покупка плёнки…"></div>
           <div class="daterow">
@@ -431,7 +420,7 @@
             </div>
             <div class="daterow">
               <div><label class="f" for="pay-date">Дата платежа</label><input id="pay-date" type="date"></div>
-              <div><label class="f" for="pay-amt">Сумма</label><input id="pay-amt" type="number" inputmode="decimal" min="0" placeholder="0"></div>
+              <div><label class="f" for="pay-amt">Сумма</label><input id="pay-amt" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div>
             </div>
             <div>
               <label class="f">Способ оплаты</label>
@@ -535,6 +524,14 @@
               <button class="btn sec sm" type="button" id="ue-pw-copy" hidden>Копировать</button>
             </div>
           </div>
+          <div class="small muted" id="ue-pw-note" hidden>Пароль администратора не хранится в открытом виде и не показывается.</div>
+          <div class="pw-box" id="ue-pk-box" hidden>
+            <div style="min-width:0;flex:1">
+              <div class="small muted">Вход по Face ID</div>
+              <div id="ue-pk-val">—</div>
+            </div>
+            <button class="btn sec sm" type="button" id="ue-pk-reset" hidden>Сбросить Face ID</button>
+          </div>
           <div><label class="f" id="ue-new-pw-l" for="ue-new-pw">Пароль (от 6 символов)</label><input id="ue-new-pw" type="password" placeholder="Не короче 6 символов" autocomplete="new-password"></div>
           <div class="err" id="ue-err"></div>
           <div class="dlg-foot">
@@ -562,29 +559,20 @@
   <div class="stack">
     <button class="btn sec block" id="md-pk" hidden><svg><use href="#i-faceid"/></svg>Подключить Face ID</button>
     <div id="md-pk-list" class="small muted"></div>
-    <button class="btn sec block" id="md-pw">Сменить пароль</button>
     <button class="btn block" id="md-out">Выйти</button>
     <button class="btn sec block" id="md-close">Закрыть</button>
   </div>
-</dialog>
-
-<dialog id="pw-dlg">
-  <h3 id="pd-title">Сменить пароль</h3>
-  <div class="field" id="pd-old-f"><label class="f">Текущий пароль</label><input id="pd-old" type="password" autocomplete="current-password"></div>
-  <div class="field"><label class="f" id="pd-new-l">Новый пароль (от 6 символов)</label><input id="pd-new" type="password" autocomplete="new-password"></div>
-  <div class="err" id="pd-err"></div>
-  <div class="acts" style="justify-content:flex-end"><button class="btn sec" id="pd-cancel">Отмена</button><button class="btn" id="pd-ok">Сохранить</button></div>
 </dialog>
 
 <dialog id="ed-dlg">
   <h3 id="ed-title">Исправить запись</h3>
   <div class="stack">
     <div><label class="f" for="ed-grade">Сорт</label><select id="ed-grade"></select></div>
-    <div><label class="f" for="ed-kg">Вес нетто, кг</label><input id="ed-kg" type="number" inputmode="decimal" step="0.001" min="0"></div>
+    <div><label class="f" for="ed-kg">Вес нетто, кг</label><input id="ed-kg" type="text" inputmode="decimal" autocomplete="off"></div>
     <div id="ed-in"><label class="f" for="ed-worker">Кто собрал</label><input id="ed-worker"></div>
     <div><label class="f" for="ed-note">Заметка</label><input id="ed-note"></div>
     <div id="ed-out" class="stack"><div><label class="f" for="ed-cust">Покупатель</label><input id="ed-cust"></div>
-      <div class="daterow"><div><label class="f" for="ed-price">Цена за кг</label><input id="ed-price" type="number" inputmode="decimal" min="0"></div><div><label class="f" for="ed-amount">Сумма</label><input id="ed-amount" type="number" inputmode="decimal" min="0"></div></div></div>
+      <div class="daterow"><div><label class="f" for="ed-price">Цена за кг</label><input id="ed-price" type="text" inputmode="decimal" autocomplete="off"></div><div><label class="f" for="ed-amount">Сумма</label><input id="ed-amount" type="text" inputmode="decimal" autocomplete="off"></div></div></div>
     <div><label class="f" for="ed-reason">Причина исправления (обязательно)</label><input id="ed-reason"></div>
   </div>
   <div class="err" id="ed-err" style="margin-top:8px"></div>

@@ -18,12 +18,19 @@ function prevPeriod(from, to) {
   return [pf.toISOString().slice(0, 10), pt.toISOString().slice(0, 10)];
 }
 
+// Ячейка CSV: экранирование кавычек/разделителей и защита от формул Excel (CSV injection):
+// текст, начинающийся с = + - @ (или таба/CR), получает префикс ', числа вида -12,5 не трогаем.
 function csvCell(v) {
-  const s = v === null || v === undefined ? '' : String(v);
+  let s = v === null || v === undefined ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+([.,]\d+)?$/.test(s)) s = "'" + s;
   return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
 module.exports = handler(async (req, res) => {
+  // Все финансовые записи (расходы, оплаты, инвестиции) — только администратор; директор — только чтение.
+  if (req.method !== 'GET' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'изменять финансовые данные может только администратор' });
+  }
   if (req.query.resource === 'expenses') return handleExpenses(req, res);
   if (req.query.resource === 'reconcile') return handleReconcile(req, res);
   if (req.query.resource === 'payments') return handlePayments(req, res);

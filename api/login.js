@@ -1,4 +1,5 @@
 const { query, ensureSchema } = require('../lib/db');
+const { checkOrigin, logError } = require('../lib/http');
 const { verifyPassword, encryptPassword, DUMMY_HASH, makeSessionValue, sessionCookie, clientIp, audit } = require('../lib/auth');
 
 // Вход по одному паролю: имени нет, пароль определяет пользователя и его роль.
@@ -10,6 +11,7 @@ const WINDOW_MIN = 15;
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'только POST' });
+  if (!checkOrigin(req)) return res.status(403).json({ error: 'недопустимый источник запроса' });
   try {
     await ensureSchema();
     const ip = clientIp(req);
@@ -17,7 +19,7 @@ module.exports = async (req, res) => {
 
     const [{ ipn, alln }] = await query(
       `SELECT count(*) FILTER (WHERE ip=$1)::int AS ipn, count(*)::int AS alln
-       FROM login_fails WHERE ts > now() - ($2 || ' minutes')::interval`,
+       FROM login_fails WHERE ts > now() - ($2 || ' minutes')::interval AND name IS DISTINCT FROM 'passkey'`,
       [ip, String(WINDOW_MIN)]
     );
     if (ipn >= MAX_FAILS_IP || alln >= MAX_FAILS_ALL) {
@@ -44,9 +46,9 @@ module.exports = async (req, res) => {
     }
     await audit(req, match.name, 'login');
     res.setHeader('Set-Cookie', sessionCookie(makeSessionValue(match), 12 * 3600));
-    res.status(200).json({ ok: true, name: match.name, role: match.role, must_change: match.must_change });
+    res.status(200).json({ ok: true, name: match.name, role: match.role, must_change: false });
   } catch (e) {
-    console.error(e);
+    logError('login', e);
     res.status(500).json({ error: 'внутренняя ошибка' });
   }
 };
