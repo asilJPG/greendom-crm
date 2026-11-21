@@ -10,6 +10,7 @@ import { initCounterparties, loadCounterparties } from './counterparties.js';
 import { initInvestments, loadInvestments } from './investments.js';
 import { editBtnHtml, moreBtnHtml, openRowMenu } from './ui.js';
 import { initNumpad } from './numpad.js';
+import { initOffline, cacheSet, cacheGet, isQueueableKind, enqueueOffline, listOutbox, flushOfflineQueue, applyOutboxToStock } from './offline.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -256,6 +257,25 @@ async function logout() {
   showLogin();
 }
 
+let offlineState = { online: navigator.onLine, pending: 0 };
+
+function paintConn(st) {
+  if (st) offlineState = st;
+  const dot = $('dot');
+  const seen = $('seen');
+  if (!dot || !seen) return;
+  if (!offlineState.online) {
+    dot.className = 'dot bad';
+    seen.textContent = offlineState.pending > 0 ? `Оффлайн · очередь: ${offlineState.pending}` : 'Оффлайн';
+  } else if (offlineState.pending > 0) {
+    dot.className = 'dot ok';
+    seen.textContent = `Синхр. (${offlineState.pending})…`;
+  } else {
+    dot.className = 'dot ok';
+    seen.textContent = 'Онлайн';
+  }
+}
+
 /* ───── старт, статус и справочники ───── */
 function paintStatus(d) {
   if (typeof d.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.today)) state.today = d.today;
@@ -272,21 +292,35 @@ function paintStatus(d) {
     state.crop = dev.crop || 'Клубника';
   }
   $('title').textContent = 'Склад' + (state.crop ? ' · ' + state.crop : '');
-  // Онлайн-режим: моноблок и сайт работают напрямую с облачной БД
-  $('seen').textContent = 'Онлайн';
-  $('dot').className = 'dot ok';
+  paintConn();
 }
 
 async function refreshAll() {
+  if (!navigator.onLine) return;
   const s = await api('GET', '/api/status');
-  if (s.ok) paintStatus(s.data);
+  if (s.ok) {
+    cacheSet('status', s.data);
+    paintStatus(s.data);
+  }
   if (state.tab === 'stock') loadStock();
 }
 
 async function start() {
-  const r = await rawCall('GET', '/api/status');
+  let r = await rawCall('GET', '/api/status');
+  let fromCache = false;
   if (r.status === 401) return showLogin();
-  if (!r.ok) return toast(errMsg(r), true);
+  if (!r.ok) {
+    if (r.status === 0) {
+      const cached = await cacheGet('status');
+      if (cached && cached.user) {
+        r = { ok: true, data: cached };
+        fromCache = true;
+      }
+    }
+    if (!r.ok) return toast(errMsg(r), true);
+  } else {
+    cacheSet('status', r.data);
+  }
   state.me = r.data.user;
   if (state.me.must_change) { state.me = null; return showMustChangeBlocked(); }
 
@@ -298,7 +332,11 @@ async function start() {
   buildNav();
   paintStatus(r.data);
   navigate(resolveRouteFromPath(location.pathname), { push: false, replace: true });
-  if (state.me.role === 'admin') loadOps();
+  if (fromCache) toast('Нет интернета — работа в оффлайн-режиме', false, 5000);
+  else {
+    flushOfflineQueue();
+    if (state.me.role === 'admin') loadOps();
+  }
 
   clearInterval(state.timer);
   state.timer = setInterval(refreshAll, 30000);
@@ -306,9 +344,18 @@ async function start() {
 
 /* ───── остатки ───── */
 async function loadStock() {
-  const r = await api('GET', '/api/stock');
-  if (!r.ok) return;
-  const d = r.data;
+  let base = null;
+  if (navigator.onLine) {
+    const r = await api('GET', '/api/stock');
+    if (r.ok) {
+      base = r.data;
+      cacheSet('stock', base);
+    }
+  }
+  if (!base) base = await cacheGet('stock');
+  if (!base) return;
+  const outbox = await listOutbox();
+  const d = applyOutboxToStock(base, outbox);
   state.stockMap = Object.fromEntries(d.rows.map((x) => [x.grade, x.balance_kg]));
   $('total').textContent = kg(d.total_kg);
   $('stock-cards').innerHTML = d.rows.map((x) =>
@@ -642,8 +689,24 @@ async function loadLog() {
 const KIND_DONE = { intake: 'Приход записан', sale: 'Продажа оформлена', writeoff: 'Списание записано', edit: 'Запись исправлена', cancel_movement: 'Запись отменена', cancel_sale: 'Продажа отменена' };
 
 async function sendCmd(kind, payload, requestId) {
-  const r = await api('POST', '/api/command', { kind, payload, request_id: requestId || rid() });
-  if (!r.ok) { toast(errMsg(r), true); return false; }
+  const reqId = requestId || rid();
+  let r;
+  if (!navigator.onLine && isQueueableKind(kind)) {
+    r = { ok: false, status: 0 };
+  } else {
+    r = await api('POST', '/api/command', { kind, payload, request_id: reqId });
+  }
+  if (!r.ok) {
+    if (r.status === 0 && isQueueableKind(kind)) {
+      const cnt = await enqueueOffline(kind, payload, reqId);
+      toast(`Нет интернета — сохранено локально (в очереди: ${cnt}). Отправится само при появлении сети`, false, 5000);
+      await loadStock();
+      renderOpsTiles();
+      return true;
+    }
+    toast(errMsg(r), true);
+    return false;
+  }
   const d = r.data || {};
   if (d.duplicate) toast('Эта операция уже принята ранее');
   else if (d.status === 'pending') {
@@ -1006,6 +1069,16 @@ $('ed-ok').onclick = async () => {
 
 clearInvalidOnInput();
 initNumpad();
+initOffline({
+  onChange: paintConn,
+  onSynced: async ({ sent, failedMsgs }) => {
+    if (sent > 0) toast(`Оффлайн-очередь отправлена в облако (${sent})`, false, 5000);
+    if (failedMsgs && failedMsgs.length) toast(`Отклонено сервером: ${failedMsgs[0]}`, true, 6000);
+    await loadStock();
+    renderOpsTiles();
+    if (state.tab === 'history') loadHistory();
+  },
+});
 initScale(toast);
 initInvoice(toast);
 initReport({
