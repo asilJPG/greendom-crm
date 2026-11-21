@@ -474,8 +474,7 @@ function rowPerms(m) {
   const active = m.status !== 'cancelled';
   if (!me || !active) return { invoice: false, edit: false, cancel: false };
   const admin = me.role === 'admin';
-  const mineToday = me.role === 'keeper' && isWebRow(m) && m.user_name === me.name && String(m.ts || '').slice(0, 10) === today();
-  return { invoice: m.type === 'out', edit: admin, cancel: admin || mineToday };
+  return { invoice: m.type === 'out', edit: admin, cancel: admin };
 }
 
 function hasRowActions(m) {

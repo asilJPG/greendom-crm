@@ -99,9 +99,10 @@ test('#1 веб-приход/продажа/списание уходят мон
   assert.deepEqual(again.body.web_movements, []);
   assert.equal(again.body.web_cursor, r.body.web_cursor);
 
-  // складовщик отменяет свою веб-запись сегодня — сразу; моноблок получает её ещё раз со статусом cancelled
+  // складовщик не может отменить даже свою сегодняшнюю веб-запись; отменяет только админ
   const inId = rows[0].id;
-  const cancel = await cmd(KEEPER, 'cancel_movement', { id: inId, device: 'web', reason: 'ошибка' }, 'm-cancel');
+  assert.equal((await cmd(KEEPER, 'cancel_movement', { id: inId, device: 'web', reason: 'ошибка' }, 'm-cancel-k')).code, 403, 'складовщик не отменяет даже свою запись');
+  const cancel = await cmd(ADMIN, 'cancel_movement', { id: inId, device: 'web', reason: 'ошибка' }, 'm-cancel');
   assert.equal(cancel.code, 200, JSON.stringify(cancel.body));
   assert.equal(cancel.body.status, 'applied');
   assert.equal((await cmd(KEEPER2, 'cancel_sale', { id: s[0].sale_id, device: 'web', reason: 'чужая' })).code, 403, 'чужую веб-запись складовщик не отменяет');
