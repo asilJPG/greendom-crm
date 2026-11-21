@@ -380,6 +380,13 @@ async function connectByUser() {
       return fallbackToManual('Весы не подключены — вводите вес вручную');
     }
     SC.userDisconnected = false;
+    // Забываем старые лишние порты (например пустые COM1/COM2), чтобы Chrome всегда автоподключал только выбранный рабочий порт
+    try {
+      const oldPorts = await navigator.serial.getPorts();
+      for (const op of oldPorts) {
+        if (op !== port && typeof op.forget === 'function') await op.forget().catch(() => {});
+      }
+    } catch {}
     await openPort(port);
   } catch (e) {
     toastFn('Не удалось открыть порт весов: ' + (e && e.message ? e.message : 'ошибка'), true);
@@ -398,7 +405,13 @@ export async function autoConnectScale() {
   SC.connecting = true;
   try {
     const ports = await navigator.serial.getPorts();
-    if (ports && ports[0]) await openPort(ports[0]);
+    if (ports && ports.length) {
+      // В приоритете USB-адаптеры (CH340/FTDI с usbVendorId), а не пустые материнские COM1/COM2
+      const usbPort = ports.find((p) => {
+        try { return Boolean(p.getInfo && p.getInfo().usbVendorId); } catch { return false; }
+      });
+      await openPort(usbPort || ports[0]);
+    }
   } catch {
     // тихо: остаётся ручной ввод
   } finally {
