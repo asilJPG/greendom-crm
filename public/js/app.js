@@ -8,7 +8,7 @@ import { initExpenses, loadExpenses, openExpenseById } from './expenses.js';
 import { initRefs, loadRefs } from './refs.js';
 import { initCounterparties, loadCounterparties } from './counterparties.js';
 import { initInvestments, loadInvestments } from './investments.js';
-import { editBtnHtml, moreBtnHtml, openRowMenu } from './ui.js';
+import { editBtnHtml, moreBtnHtml, openRowMenu, attachAutocomplete } from './ui.js';
 import { initNumpad } from './numpad.js';
 import { initOffline, cacheSet, cacheGet, isQueueableKind, enqueueOffline, listOutbox, flushOfflineQueue, applyOutboxToStock } from './offline.js';
 
@@ -1094,6 +1094,15 @@ $('ed-ok').onclick = async () => {
 };
 
 clearInvalidOnInput();
+const CP_KIND_SHORT = { buyer: 'Покупатель', supplier: 'Поставщик', employee: 'Сотрудник', both: 'Покупатель / Поставщик' };
+const cpSuggestions = () => (state.customers || []).map((c) => ({
+  value: c.name,
+  sub: [CP_KIND_SHORT[c.kind] || '', c.phone || ''].filter(Boolean).join(' · '),
+}));
+attachAutocomplete($('exp-cp'), cpSuggestions);
+attachAutocomplete($('inv-f-investor'), cpSuggestions);
+attachAutocomplete($('ed-cust'), cpSuggestions);
+attachAutocomplete($('cp-search'), cpSuggestions);
 initNumpad();
 initOffline({
   onChange: paintConn,

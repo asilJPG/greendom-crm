@@ -162,3 +162,80 @@ export function openRowMenu(anchor, items) {
     window.addEventListener('scroll', closeRowMenu, true);
   }, 0);
 }
+
+/* ───── Кастомные подсказки (автокомплит) при нажатии на поле — работает на iOS, Android и ПК ───── */
+let activeAc = null;
+
+function closeAc() {
+  if (!activeAc) return;
+  activeAc.remove();
+  activeAc = null;
+}
+
+/**
+ * Подключает выпадающие подсказки из базы при фокусе/клике и вводе текста.
+ * @param {HTMLInputElement} input
+ * @param {function(): Array<string|{value:string, sub?:string}>} getItems
+ */
+export function attachAutocomplete(input, getItems) {
+  if (!input || input.dataset.acBound) return;
+  input.dataset.acBound = '1';
+  input.removeAttribute('list');
+  input.setAttribute('autocomplete', 'off');
+
+  const render = () => {
+    closeAc();
+    const raw = (getItems() || [])
+      .map((x) => (typeof x === 'string' ? { value: x, sub: '' } : x))
+      .filter((x) => x && x.value);
+    if (!raw.length) return;
+
+    const q = (input.value || '').trim().toLowerCase();
+    const list = q
+      ? raw.filter((x) => x.value.toLowerCase().includes(q) || (x.sub && x.sub.toLowerCase().includes(q)))
+      : raw;
+    if (!list.length) return;
+
+    const pop = document.createElement('div');
+    pop.className = 'ac-pop';
+    pop.innerHTML = list.slice(0, 30).map((it, i) => `
+      <button type="button" class="ac-item" data-ai="${i}">
+        <span class="ac-main">${esc(it.value)}</span>
+        ${it.sub ? `<span class="ac-sub">${esc(it.sub)}</span>` : ''}
+      </button>`).join('');
+
+    document.body.appendChild(pop);
+    activeAc = pop;
+
+    const r = input.getBoundingClientRect();
+    const maxH = Math.min(240, window.innerHeight - r.bottom - 16);
+    pop.style.left = `${Math.max(8, r.left)}px`;
+    pop.style.width = `${Math.min(r.width, window.innerWidth - 16)}px`;
+    if (maxH >= 120) {
+      pop.style.top = `${r.bottom + 4}px`;
+      pop.style.maxHeight = `${maxH}px`;
+    } else {
+      const aboveH = Math.min(240, r.top - 16);
+      pop.style.bottom = `${window.innerHeight - r.top + 4}px`;
+      pop.style.maxHeight = `${Math.max(100, aboveH)}px`;
+    }
+
+    pop.onpointerdown = (e) => {
+      const b = e.target.closest('[data-ai]');
+      if (!b) return;
+      e.preventDefault();
+      const picked = list[Number(b.dataset.ai)];
+      if (picked) {
+        input.value = picked.value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      closeAc();
+    };
+  };
+
+  input.addEventListener('focus', render);
+  input.addEventListener('click', render);
+  input.addEventListener('input', render);
+  input.addEventListener('blur', () => setTimeout(closeAc, 120));
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAc(); });
+}

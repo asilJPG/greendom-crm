@@ -460,6 +460,22 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
 .act-menu-item.danger { color: var(--red); }
 .act-menu-item.danger:hover { background: var(--red-bg); }
 
+/* Кастомный выпадающий список подсказок из базы (autocomplete) */
+.ac-pop {
+  position: fixed; z-index: 130; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: #fff; border: 1px solid var(--line2); border-radius: 12px;
+  padding: 4px; box-shadow: 0 12px 32px rgba(0, 0, 0, .16), 0 2px 6px rgba(0, 0, 0, .06);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.ac-item {
+  width: 100%; text-align: left; border: 0; background: transparent;
+  padding: 10px 12px; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
+.ac-item:hover, .ac-item:active { background: var(--soft2); }
+.ac-main { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.ac-sub { font-size: 12px; color: var(--mut); white-space: nowrap; }
+
 .u-row { display: flex; align-items: center; gap: 12px; padding: 12px 8px; margin: 0 -8px; border-bottom: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: background .12s; }
 .u-row:last-child { border-bottom: 0; }
 .u-row:hover { background: var(--soft); }

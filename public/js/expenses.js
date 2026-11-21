@@ -1,7 +1,7 @@
 // Модуль «Расходы»: полноценный документ «Акт расхода» на отдельной странице (как в iiko / 1С) + категории.
 import { api, errMsg, newRequestId } from './api.js';
 import { parseDecimal, round2 } from './num.js';
-import { editBtnHtml, openEntityModal } from './ui.js';
+import { editBtnHtml, openEntityModal, attachAutocomplete } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -118,10 +118,27 @@ function renderDraftLines() {
       </div>
     </div>`).join('');
 
+  const pastItemNames = () => {
+    const seen = new Set();
+    const out = [];
+    for (const a of loadedItems) {
+      for (const it of Array.isArray(a.items) ? a.items : []) {
+        const n = (it?.name || '').trim();
+        if (n && !seen.has(n.toLowerCase())) {
+          seen.add(n.toLowerCase());
+          out.push({ value: n, sub: a.category_name || '' });
+        }
+      }
+    }
+    return out;
+  };
+
   box.querySelectorAll('.doc-line').forEach((row) => {
     const idx = Number(row.dataset.li);
     const line = draftLines[idx];
     const sumEl = row.querySelector('[data-f="sum"]');
+    const nameEl = row.querySelector('[data-f="name"]');
+    if (nameEl) attachAutocomplete(nameEl, pastItemNames);
     row.querySelectorAll('[data-f]').forEach((inp) => {
       inp.oninput = () => {
         const f = inp.dataset.f;
