@@ -204,12 +204,20 @@ function updateStreamWeight(val, flagStable, sess) {
 async function pollOnce(sess) {
   if (sess.closing || sess.polling || sess.isStream || SC.sess !== sess) return;
   sess.polling = true;
+  const markMiss = () => {
+    sess.missCount = (sess.missCount || 0) + 1;
+    // Не сбрасываем табло из-за одного случайного сбоя CH340 — только после 5 пропусков подряд (~3 сек)
+    if (sess.missCount >= 5) {
+      state.online = false;
+      renderDisplay();
+    }
+  };
   try {
     sess.buf.length = 0;
     await sess.writer.write(Uint8Array.of(0x05)); // ENQ
     const ack = await waitBuf(sess, () => (sess.buf.length ? sess.buf[0] : null), 900);
     if (sess.closing) return;
-    if (ack !== 0x06) { state.online = false; renderDisplay(); return; }
+    if (ack !== 0x06) { markMiss(); return; }
     sess.buf.length = 0;
     await sess.writer.write(Uint8Array.of(0x11)); // DC1
     const frame = await waitBuf(sess, () => {
@@ -217,16 +225,17 @@ async function pollOnce(sess) {
       return i >= 0 ? sess.buf.slice(0, i + 1) : null;
     }, 1500);
     if (sess.closing) return;
-    if (!frame) { state.online = false; renderDisplay(); return; }
+    if (!frame) { markMiss(); return; }
     const m = /\x01\x02([SU])\s*([-+]?)\s*(\d+(?:\.\d+)?)/.exec(String.fromCharCode(...frame));
     if (m) {
+      sess.missCount = 0;
       state.online = true;
       state.stable = m[1] === 'S';
       state.gross = (m[2] === '-' ? -1 : 1) * parseFloat(m[3]);
       renderDisplay();
     }
   } catch {
-    if (!sess.closing) { state.online = false; renderDisplay(); }
+    if (!sess.closing) markMiss();
   } finally {
     sess.polling = false;
   }
@@ -306,17 +315,21 @@ async function openPort(port) {
         if (done) break;
         if (value) {
           sess.buf.push(...value);
-          // Параллельно проверяем текстовые строки для потоковых весов
-          for (const b of value) {
-            if (b === 0x0a || b === 0x0d) {
-              if (sess.lineBuf) {
-                tryParseStreamLine(sess.lineBuf, sess);
-                sess.lineBuf = '';
+          // Потоковый парсер запускаем ТОЛЬКО если сейчас не идёт ENQ/DC1 опрос и в пакете нет CAS-кадра (0x01/0x02)
+          if (!sess.polling && !value.includes(0x01) && !value.includes(0x02)) {
+            for (const b of value) {
+              if (b === 0x0a || b === 0x0d) {
+                if (sess.lineBuf) {
+                  tryParseStreamLine(sess.lineBuf, sess);
+                  sess.lineBuf = '';
+                }
+              } else if (b >= 0x20 && b <= 0x7e) {
+                sess.lineBuf += String.fromCharCode(b);
+                if (sess.lineBuf.length > 120) sess.lineBuf = sess.lineBuf.slice(-120);
               }
-            } else if (b >= 0x20 && b <= 0x7e) {
-              sess.lineBuf += String.fromCharCode(b);
-              if (sess.lineBuf.length > 120) sess.lineBuf = sess.lineBuf.slice(-120);
             }
+          } else {
+            sess.lineBuf = '';
           }
         }
       }
@@ -337,7 +350,7 @@ async function openPort(port) {
   state.note = '';
   state.online = false;
   renderDisplay();
-  sess.pollTimer = setInterval(() => pollOnce(sess), 400);
+  sess.pollTimer = setInterval(() => pollOnce(sess), 500);
   pollOnce(sess);
 }
 
