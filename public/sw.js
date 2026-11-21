@@ -15,6 +15,7 @@ const ASSETS = [
   '/js/invoice.js',
   '/js/expenses.js',
   '/js/payments.js',
+  '/js/payroll.js',
   '/js/investments.js',
   '/js/counterparties.js',
   '/js/refs.js',

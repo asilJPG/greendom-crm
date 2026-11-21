@@ -23,6 +23,7 @@
   <symbol id="i-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1Z M8 5H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2 M9.5 13.5 11 15l3.5-3.5"/></symbol>
   <symbol id="i-exp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16l-2.5-1.5L14 20l-2-1.5L10 20l-2.5-1.5L5 20V4Z M9 9h6 M9 13h4"/></symbol>
   <symbol id="i-pay" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18 M7 15h4"/></symbol>
+  <symbol id="i-zp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></symbol>
   <symbol id="i-inv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8 M15 7h6v6"/></symbol>
   <symbol id="i-cp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14 M15 10h3a2 2 0 0 1 2 2v8 M2 20h20 M8 8h2 M8 12h2 M8 16h2"/></symbol>
   <symbol id="i-refs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16 M4 12h16 M4 18h10 M17 16l3 3 M20 16l-3 3"/></symbol>
@@ -356,6 +357,116 @@
             <div style="display:flex;gap:8px;margin-left:auto">
               <button type="button" class="btn sec" id="pm-f-cancel">Отмена</button>
               <button type="button" class="btn" id="pm-f-save">Провести оплату</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="p-payroll" hidden>
+      <div id="pr-main-view">
+        <div class="page-head">
+          <div>
+            <h1 class="page">Зарплата</h1>
+            <p class="sub">Штатные работники теплицы и выдача зарплаты / авансов (автоматически попадает в ОПиУ)</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn sec" id="pr-open-staff" hidden><svg><use href="#i-plus"/></svg>Работник</button>
+            <button class="btn" id="pr-open-pay" hidden><svg><use href="#i-plus"/></svg>Выдать ЗП</button>
+          </div>
+        </div>
+
+        <div class="seg" id="pr-subtabs">
+          <button class="sel" data-prt="payouts">Выплаты</button>
+          <button data-prt="staff">Работники</button>
+        </div>
+
+        <div id="pr-tab-payouts">
+          <div class="hero">
+            <div class="lbl">Выдано зарплаты за период</div>
+            <div class="num"><span id="pr-total">0</span><small id="pr-cur">сум</small></div>
+            <div class="small muted" id="pr-count" style="margin-top:6px"></div>
+          </div>
+          <div class="card filters">
+            <div class="chips">
+              <button class="chip" data-prrange="month">Этот месяц</button><button class="chip" data-prrange="prevmonth">Прошлый месяц</button><button class="chip" data-prrange="today">Сегодня</button>
+            </div>
+            <div class="daterow"><input type="date" id="pr-from" aria-label="С даты"><input type="date" id="pr-to" aria-label="По дату"></div>
+          </div>
+          <div class="card"><h2>По работникам</h2><div id="pr-by-emp"></div></div>
+          <div class="card"><h2>История выплат</h2><div id="pr-rows"></div></div>
+        </div>
+
+        <div id="pr-tab-staff" hidden>
+          <div class="stack" id="pr-staff-list"></div>
+        </div>
+      </div>
+
+      <div id="pr-pay-view" hidden>
+        <button type="button" class="back-btn" id="pr-p-back">← Зарплата</button>
+        <h1 class="page">Выдача зарплаты</h1>
+        <p class="sub">Выберите работника и укажите сумму — запись сразу попадёт в ОПиУ (статья «Зарплата»)</p>
+        <div class="card stack">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <label class="f" style="margin:0">Работник</label>
+              <button type="button" class="btn sec sm" id="pr-p-add-w">+ Новый работник</button>
+            </div>
+            <div class="cust-chips" id="pr-w-chips"></div>
+          </div>
+          <div>
+            <label class="f">Тип выплаты</label>
+            <div class="chips" id="pr-p-kind">
+              <button class="chip sel" type="button" data-pk="Зарплата">Зарплата</button>
+              <button class="chip" type="button" data-pk="Аванс">Аванс</button>
+              <button class="chip" type="button" data-pk="Премия">Премия</button>
+              <button class="chip" type="button" data-pk="Отпускные">Отпускные</button>
+            </div>
+          </div>
+          <div class="daterow">
+            <div><label class="f" for="pr-p-date">Дата выдачи</label><input id="pr-p-date" type="date"></div>
+            <div><label class="f" for="pr-p-period">За период (месяц)</label><input id="pr-p-period" placeholder="Напр. 11.2026"></div>
+          </div>
+          <div><label class="f" for="pr-p-amt">Сумма</label><input id="pr-p-amt" type="text" inputmode="decimal" placeholder="0"></div>
+          <div>
+            <label class="f">Способ оплаты</label>
+            <div class="chips" id="pr-p-pm">
+              <button class="chip sel" type="button" data-pm="cash">Наличные</button>
+              <button class="chip" type="button" data-pm="card">Карта</button>
+              <button class="chip" type="button" data-pm="transfer">Перечисление</button>
+            </div>
+          </div>
+          <div><label class="f" for="pr-p-comment">Комментарий (необязательно)</label><input id="pr-p-comment" placeholder="За сколько дней, переработка и т.д."></div>
+          <div class="err" id="pr-p-err"></div>
+          <div class="dlg-foot">
+            <div style="display:flex;gap:8px;margin-left:auto">
+              <button type="button" class="btn sec" id="pr-p-cancel">Отмена</button>
+              <button type="button" class="btn" id="pr-p-save">Выдать ЗП</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="pr-staff-view" hidden>
+        <button type="button" class="back-btn" id="pr-st-back">← Зарплата</button>
+        <h1 class="page" id="pr-st-title">Новый работник теплицы</h1>
+        <p class="sub">Работник для учёта зарплаты (без доступа на сайт)</p>
+        <div class="card stack">
+          <div class="daterow">
+            <div><label class="f" for="pr-st-name">ФИО / Имя</label><input id="pr-st-name" placeholder="Напр. Алишер Каримов"></div>
+            <div><label class="f" for="pr-st-pos">Должность</label><input id="pr-st-pos" placeholder="Напр. Агроном, Рабочий, Сторож"></div>
+          </div>
+          <div class="daterow">
+            <div><label class="f" for="pr-st-sal">Оклад в месяц (необязательно)</label><input id="pr-st-sal" type="text" inputmode="decimal" placeholder="0"></div>
+            <div><label class="f" for="pr-st-phone">Телефон</label><input id="pr-st-phone" placeholder="+998…"></div>
+          </div>
+          <div><label class="f" for="pr-st-note">Заметка</label><input id="pr-st-note" placeholder="График, дата приёма, условия…"></div>
+          <div class="err" id="pr-st-err"></div>
+          <div class="dlg-foot">
+            <button type="button" class="btn ghost danger" id="pr-st-toggle" hidden>Уволить / Скрыть</button>
+            <div style="display:flex;gap:8px;margin-left:auto">
+              <button type="button" class="btn sec" id="pr-st-cancel">Отмена</button>
+              <button type="button" class="btn" id="pr-st-save">Сохранить</button>
             </div>
           </div>
         </div>

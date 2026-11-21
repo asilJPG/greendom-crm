@@ -6,6 +6,7 @@ import { initReport, loadReport } from './report.js';
 import { initInvoice, openInvoice } from './invoice.js';
 import { initExpenses, loadExpenses, openExpenseById } from './expenses.js';
 import { initPayments, loadPayments } from './payments.js';
+import { initPayroll, loadPayroll } from './payroll.js';
 import { initRefs, loadRefs } from './refs.js';
 import { initCounterparties, loadCounterparties } from './counterparties.js';
 import { initInvestments, loadInvestments } from './investments.js';
@@ -37,6 +38,7 @@ const ROUTES = [
   ['history', '/history', 'История', 'i-history', null, 'Склад'],
   ['report', '/report', 'Отчёт (ОПиУ)', 'i-report', ['director', 'admin'], 'Административное'],
   ['expenses', '/expenses', 'Расходы', 'i-exp', ['director', 'admin'], 'Административное'],
+  ['payroll', '/payroll', 'Зарплата', 'i-zp', ['director', 'admin'], 'Административное'],
   ['payments', '/payments', 'Акты оплаты', 'i-pay', ['director', 'admin'], 'Административное'],
   ['investments', '/investments', 'Инвестиции', 'i-inv', ['director', 'admin'], 'Административное'],
   ['counterparties', '/counterparties', 'Контрагенты', 'i-cp', ['director', 'admin'], 'Административное'],
@@ -253,6 +255,7 @@ function navigate(id, { push = true, replace = false } = {}) {
     state.opsTimer = setInterval(loadOps, 8000);
   }
   if (ridTab === 'expenses') loadExpenses();
+  if (ridTab === 'payroll') loadPayroll();
   if (ridTab === 'payments') loadPayments();
   if (ridTab === 'investments') loadInvestments();
   if (ridTab === 'counterparties') loadCounterparties();
@@ -880,6 +883,7 @@ $('refresh').onclick = async () => {
   if (state.tab === 'history') loadHistory();
   if (state.tab === 'queue') loadOps();
   if (state.tab === 'expenses') loadExpenses();
+  if (state.tab === 'payroll') loadPayroll();
   if (state.tab === 'payments') loadPayments();
   if (state.tab === 'investments') loadInvestments();
   if (state.tab === 'counterparties') loadCounterparties();
@@ -1148,6 +1152,12 @@ initExpenses({
   askText,
 });
 initPayments({
+  me: () => state.me,
+  cur: () => state.cur,
+  toast,
+  askText,
+});
+initPayroll({
   me: () => state.me,
   cur: () => state.cur,
   toast,

@@ -773,3 +773,42 @@ test('Telegram-бот: уведомления о приходе и продаж�
     delete globalThis.__TEST_TG;
   }
 });
+
+test('зарплата (/payroll): штатные работники, выдача ЗП, права и попадание в ОПиУ', async () => {
+  await globalThis.__TEST_DB.query('DELETE FROM login_fails');
+  const { cookie: admin } = await signIn(OWNER_PW);
+  const { cookie: dir } = await signIn('director-pass-2');
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Директор не может добавлять работников и выдавать ЗП (403)
+  assert.equal((await call(report, { method: 'POST', query: { resource: 'payroll' }, body: { target: 'staff', name: 'Рустам' }, ...as(dir) })).code, 403);
+
+  // Админ добавляет штатного работника (без доступа на сайт)
+  const st = await call(report, {
+    method: 'POST',
+    query: { resource: 'payroll' },
+    body: { target: 'staff', name: 'Рустам Агроном', position: 'Агроном', salary: 5000000, phone: '+998901231212' },
+    ...as(admin),
+  });
+  assert.equal(st.code, 200);
+
+  // Админ выдаёт аванс 1 500 000 сум
+  const zp = await call(report, {
+    method: 'POST',
+    query: { resource: 'payroll' },
+    body: { target: 'payout', doc_date: today, employee: 'Рустам Агроном', pay_kind: 'Аванс', period: '11.2026', amount: 1500000, payment_method: 'cash' },
+    ...as(admin),
+  });
+  assert.equal(zp.code, 200);
+
+  // Сводка в /payroll и попадание в ОПиУ по статье «Зарплата»
+  const pr = await call(report, { query: { resource: 'payroll', from: today, to: today }, ...as(dir) });
+  assert.equal(pr.code, 200);
+  assert.ok(pr.body.total >= 1500000);
+  assert.ok(pr.body.staff.some((s) => s.name === 'Рустам Агроном'));
+  const rustam = pr.body.by_employee.find((e) => e.employee === 'Рустам Агроном');
+  assert.ok(rustam && rustam.amount === 1500000);
+
+  const rep = await call(report, { query: { from: today, to: today }, ...as(dir) });
+  assert.ok(rep.body.by_expense_category.some((c) => c.category === 'Зарплата' && c.amount >= 1500000));
+});

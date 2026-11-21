@@ -38,6 +38,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/payroll",
+      "destination": "/index.html"
+    },
+    {
       "source": "/counterparties",
       "destination": "/index.html"
     },
