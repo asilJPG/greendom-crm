@@ -329,12 +329,21 @@ export function initScale(toast) {
 
   if (hasSerial()) {
     try {
+      navigator.serial.addEventListener('connect', () => {
+        if (!SC.userDisconnected && !SC.sess) autoConnectScale();
+      });
       navigator.serial.addEventListener('disconnect', (e) => {
         if (SC.sess && e.target === SC.sess.port) {
           closeSession(SC.sess);
-          toastFn('Весы отключены (USB). Подключите кабель и нажмите «Подключить весы»', true);
+          toastFn('Весы отключились (USB). Переподключатся сами при появлении сигнала', true);
         }
       });
+      // Если весы включили позже моноблока (например, после отключения света), подхватим порт автоматически
+      setInterval(() => {
+        if (!SC.userDisconnected && !SC.sess && !SC.connecting && !$('ops-shell')?.hidden) {
+          autoConnectScale();
+        }
+      }, 3000);
     } catch {}
   }
   renderDisplay();
