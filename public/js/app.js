@@ -5,6 +5,7 @@ import { isPasskeySupported, registerPasskey, loginWithPasskey } from './passkey
 import { initReport, loadReport } from './report.js';
 import { initInvoice, openInvoice } from './invoice.js';
 import { initExpenses, loadExpenses, openExpenseById } from './expenses.js';
+import { initPayments, loadPayments } from './payments.js';
 import { initRefs, loadRefs } from './refs.js';
 import { initCounterparties, loadCounterparties } from './counterparties.js';
 import { initInvestments, loadInvestments } from './investments.js';
@@ -36,6 +37,7 @@ const ROUTES = [
   ['history', '/history', 'История', 'i-history', null, 'Склад'],
   ['report', '/report', 'Отчёт (ОПиУ)', 'i-report', ['director', 'admin'], 'Административное'],
   ['expenses', '/expenses', 'Расходы', 'i-exp', ['director', 'admin'], 'Административное'],
+  ['payments', '/payments', 'Акты оплаты', 'i-pay', ['director', 'admin'], 'Административное'],
   ['investments', '/investments', 'Инвестиции', 'i-inv', ['director', 'admin'], 'Административное'],
   ['counterparties', '/counterparties', 'Контрагенты', 'i-cp', ['director', 'admin'], 'Административное'],
   ['refs', '/refs', 'Справочники', 'i-refs', ['admin'], 'Администрирование'],
@@ -251,6 +253,7 @@ function navigate(id, { push = true, replace = false } = {}) {
     state.opsTimer = setInterval(loadOps, 8000);
   }
   if (ridTab === 'expenses') loadExpenses();
+  if (ridTab === 'payments') loadPayments();
   if (ridTab === 'investments') loadInvestments();
   if (ridTab === 'counterparties') loadCounterparties();
   if (ridTab === 'refs') loadRefs();
@@ -877,6 +880,7 @@ $('refresh').onclick = async () => {
   if (state.tab === 'history') loadHistory();
   if (state.tab === 'queue') loadOps();
   if (state.tab === 'expenses') loadExpenses();
+  if (state.tab === 'payments') loadPayments();
   if (state.tab === 'investments') loadInvestments();
   if (state.tab === 'counterparties') loadCounterparties();
   if (state.tab === 'refs') loadRefs();
@@ -1098,7 +1102,17 @@ const cpSuggestions = () => (state.customers || []).map((c) => ({
   value: c.name,
   sub: [CP_KIND_SHORT[c.kind] || '', c.phone || ''].filter(Boolean).join(' · '),
 }));
+const empSuggestions = () => {
+  const list = (state.customers || []).filter((c) => c.kind === 'employee');
+  const rest = (state.customers || []).filter((c) => c.kind !== 'employee');
+  return [...list, ...rest].map((c) => ({
+    value: c.name,
+    sub: [CP_KIND_SHORT[c.kind] || '', c.phone || ''].filter(Boolean).join(' · '),
+  }));
+};
 attachAutocomplete($('exp-cp'), cpSuggestions);
+attachAutocomplete($('exp-emp'), empSuggestions);
+attachAutocomplete($('pm-f-cp'), cpSuggestions);
 attachAutocomplete($('inv-f-investor'), cpSuggestions);
 attachAutocomplete($('ed-cust'), cpSuggestions);
 attachAutocomplete($('cp-search'), cpSuggestions);
@@ -1130,6 +1144,12 @@ initExpenses({
   today,
   cur: () => state.cur,
   crop: () => state.crop,
+  toast,
+  askText,
+});
+initPayments({
+  me: () => state.me,
+  cur: () => state.cur,
   toast,
   askText,
 });

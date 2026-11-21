@@ -137,7 +137,7 @@ module.exports = handler(async (req, res) => {
     ),
     query(
       `SELECT e.id, to_char(e.doc_date,'YYYY-MM-DD') AS doc_date, c.name AS category,
-              e.amount, e.counterparty, e.payment_method, e.comment, e.user_name
+              e.amount, e.counterparty, e.employee, e.payment_method, e.comment, e.user_name
        FROM expenses e JOIN expense_categories c ON c.id=e.category_id
        WHERE e.status='active' AND e.doc_date BETWEEN $1::date AND $2::date
        ORDER BY e.doc_date DESC, e.id DESC LIMIT 300`,

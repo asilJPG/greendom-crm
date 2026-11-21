@@ -22,6 +22,7 @@
   <symbol id="i-wo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
   <symbol id="i-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1Z M8 5H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2 M9.5 13.5 11 15l3.5-3.5"/></symbol>
   <symbol id="i-exp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16l-2.5-1.5L14 20l-2-1.5L10 20l-2.5-1.5L5 20V4Z M9 9h6 M9 13h4"/></symbol>
+  <symbol id="i-pay" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18 M7 15h4"/></symbol>
   <symbol id="i-inv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8 M15 7h6v6"/></symbol>
   <symbol id="i-cp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14 M15 10h3a2 2 0 0 1 2 2v8 M2 20h20 M8 8h2 M8 12h2 M8 16h2"/></symbol>
   <symbol id="i-refs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16 M4 12h16 M4 18h10 M17 16l3 3 M20 16l-3 3"/></symbol>
@@ -251,8 +252,9 @@
           </div>
           <div class="daterow">
             <div><label class="f" for="exp-cat">Категория расхода</label><select id="exp-cat"></select></div>
-            <div><label class="f" for="exp-cp">Контрагент / Поставщик / Сотрудник</label><input id="exp-cp" list="cp-datalist" placeholder="Выберите из списка или введите нового"></div>
+            <div><label class="f" for="exp-cp">Контрагент / Поставщик</label><input id="exp-cp" placeholder="Выберите из списка или введите нового"></div>
           </div>
+          <div><label class="f" for="exp-emp">Сотрудник (кому выдана ЗП / подотчёт)</label><input id="exp-emp" placeholder="Нажмите для выбора сотрудника из базы или введите имя"></div>
           <div>
             <label class="f">Способ оплаты</label>
             <div class="chips" id="exp-pay-chips">
@@ -296,6 +298,67 @@
           </div>
         </div>
         <div class="card"><div id="ev-sheet"></div></div>
+      </div>
+    </section>
+
+    <section id="p-payments" hidden>
+      <div id="pay-list-view">
+        <div class="page-head">
+          <div>
+            <h1 class="page">Акты оплаты</h1>
+            <p class="sub">Поступления от покупателей и выплаты контрагентам (сразу отражаются в Акте сверки)</p>
+          </div>
+          <button class="btn" id="pm-open-add" hidden><svg><use href="#i-plus"/></svg>Акт оплаты</button>
+        </div>
+        <div class="kpis" id="pm-kpis"></div>
+        <div class="card filters">
+          <div class="chips">
+            <button class="chip" data-pmrange="month">Этот месяц</button><button class="chip" data-pmrange="prevmonth">Прошлый месяц</button><button class="chip" data-pmrange="today">Сегодня</button>
+          </div>
+          <div class="daterow"><input type="date" id="pm-from" aria-label="С даты"><input type="date" id="pm-to" aria-label="По дату"></div>
+          <div class="chips" id="pm-dir-filter">
+            <button class="chip sel" data-df="">Все</button>
+            <button class="chip" data-df="in">Поступления</button>
+            <button class="chip" data-df="out">Выплаты</button>
+          </div>
+        </div>
+        <div class="card"><div id="pm-rows"></div></div>
+      </div>
+
+      <div id="pay-new-view" hidden>
+        <button type="button" class="back-btn" id="pm-back">← Акты оплаты</button>
+        <h1 class="page">Новый акт оплаты</h1>
+        <p class="sub">Проведение оплаты по контрагенту (аналог выписки / платёжного документа в 1С)</p>
+        <div class="card stack">
+          <div>
+            <label class="f">Направление платежа</label>
+            <div class="chips" id="pm-f-dir">
+              <button class="chip sel" type="button" data-dir="in">Поступление (нам оплатили)</button>
+              <button class="chip" type="button" data-dir="out">Выплата (мы оплатили)</button>
+            </div>
+          </div>
+          <div><label class="f" for="pm-f-cp">Контрагент</label><input id="pm-f-cp" placeholder="Нажмите для выбора контрагента из базы"></div>
+          <div class="daterow">
+            <div><label class="f" for="pm-f-date">Дата платежа</label><input id="pm-f-date" type="date"></div>
+            <div><label class="f" for="pm-f-amt">Сумма</label><input id="pm-f-amt" type="text" inputmode="decimal" placeholder="0"></div>
+          </div>
+          <div>
+            <label class="f">Способ оплаты</label>
+            <div class="chips" id="pm-f-pm">
+              <button class="chip sel" type="button" data-pm="cash">Наличные</button>
+              <button class="chip" type="button" data-pm="card">Карта</button>
+              <button class="chip" type="button" data-pm="transfer">Перечисление</button>
+            </div>
+          </div>
+          <div><label class="f" for="pm-f-comment">Комментарий / № платёжки</label><input id="pm-f-comment" placeholder="За какую накладную, номер платёжного поручения…"></div>
+          <div class="err" id="pm-f-err"></div>
+          <div class="dlg-foot">
+            <div style="display:flex;gap:8px;margin-left:auto">
+              <button type="button" class="btn sec" id="pm-f-cancel">Отмена</button>
+              <button type="button" class="btn" id="pm-f-save">Провести оплату</button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

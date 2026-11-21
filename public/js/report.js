@@ -271,7 +271,7 @@ function openDrill(kind, key, d) {
     const sum = list.reduce((a, e) => a + Number(e.amount || 0), 0);
     sub += ` · актов: ${list.length} · −${money(sum)} ${cur}`;
     html = list.length ? `<ul class="list">${list.map((e) => {
-      const meta = [dm(e.doc_date), esc(e.category), PAY_LABEL[e.payment_method] || e.payment_method, e.counterparty ? esc(e.counterparty) : '', e.user_name ? esc(e.user_name) : ''].filter(Boolean).join(' · ');
+      const meta = [dm(e.doc_date), esc(e.category), PAY_LABEL[e.payment_method] || e.payment_method, e.employee ? `Сотрудник: ${esc(e.employee)}` : '', e.counterparty ? esc(e.counterparty) : '', e.user_name ? esc(e.user_name) : ''].filter(Boolean).join(' · ');
       return `<li class="li click-row" data-drill-exp="${e.id}">
         <div class="l">
           <div class="t">Акт №${e.id}${e.comment ? ' · ' + esc(e.comment) : ''}</div>

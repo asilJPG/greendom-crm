@@ -181,6 +181,7 @@ function openNewActPage() {
   $('exp-date').value = todayStr();
   $('exp-docno').value = '';
   $('exp-cp').value = '';
+  $('exp-emp').value = '';
   $('exp-comment').value = '';
   document.querySelectorAll('#exp-pay-chips .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
   draftLines = [{ name: '', qty: '1', unit: 'усл', price: '', sum: '' }];
@@ -199,6 +200,7 @@ function openEditActPage(x) {
   $('exp-docno').value = x.doc_number || '';
   $('exp-cat').value = String(x.category_id);
   $('exp-cp').value = x.counterparty || '';
+  $('exp-emp').value = x.employee || '';
   $('exp-comment').value = x.comment || '';
   document.querySelectorAll('#exp-pay-chips .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
   const items = Array.isArray(x.items) && x.items.length ? x.items : null;
@@ -236,6 +238,7 @@ function buildActSheetHtml(x) {
       </div>
       <div class="inv-meta">
         <div><span>Категория:</span> <b>${esc(x.category_name)}</b></div>
+        ${x.employee ? `<div><span>Сотрудник (кому выдано / ЗП):</span> <b>${esc(x.employee)}</b></div>` : ''}
         ${x.counterparty ? `<div><span>Контрагент / Поставщик:</span> <b>${esc(x.counterparty)}</b></div>` : ''}
         <div><span>Способ оплаты:</span> ${esc(PAY_LABEL[x.payment_method] || x.payment_method)}</div>
         ${x.user_name ? `<div><span>Оформил:</span> ${esc(x.user_name)}</div>` : ''}
@@ -311,6 +314,7 @@ export async function loadExpenses() {
       `<span class="badge b-director">${esc(x.category_name)}</span>`,
       dm(x.doc_date),
       PAY_LABEL[x.payment_method] || x.payment_method,
+      x.employee ? `Сотрудник: ${esc(x.employee)}` : '',
       x.counterparty ? esc(x.counterparty) : '',
       posCount,
     ].filter(Boolean).join(' · ');
@@ -408,6 +412,7 @@ export function initExpenses(config) {
         amount: total,
         items,
         counterparty: $('exp-cp').value,
+        employee: $('exp-emp').value,
         payment_method: payMethod,
         comment: $('exp-comment').value,
       };
