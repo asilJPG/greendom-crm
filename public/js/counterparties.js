@@ -32,6 +32,8 @@ const CRM_FIELDS = ['cp-f-name', 'cp-f-kind', 'cp-f-inn', 'cp-f-contact', 'cp-f-
 function applyRolePerms() {
   const admin = isAdmin();
   $('cp-open-add').hidden = !admin;
+  const delChip = document.querySelector('#cp-kind-chips [data-k="deleted"]');
+  if (delChip) delChip.hidden = !admin;
   const payTabBtn = document.querySelector('#cp-detail-tabs [data-cpt="pay"]');
   if (payTabBtn) payTabBtn.hidden = !admin;
   $('cp-f-save').hidden = !admin;

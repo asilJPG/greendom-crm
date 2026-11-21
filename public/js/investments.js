@@ -115,7 +115,7 @@ export async function loadInvestments() {
         </div>
         <div class="r" style="display:flex;align-items:center;gap:6px;flex:none">
           <span style="font-weight:700;white-space:nowrap">${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></span>
-          ${!cancelled && isAdmin() ? moreBtnHtml(`data-inv-menu="${x.id}"`, 'Действия') : ''}
+          ${isAdmin() ? moreBtnHtml(`data-inv-menu="${x.id}"`, 'Действия') : ''}
         </div>
       </div>`;
   }).join('') || '<div class="empty">Записей об инвестициях пока нет. Нажмите «+ Вложение», чтобы внести стартовые расходы теплицы.</div>';
@@ -125,6 +125,19 @@ export async function loadInvestments() {
       e.stopPropagation();
       const id = Number(b.dataset.invMenu);
       const item = items.find((x) => x.id === id);
+      if (item && item.status === 'cancelled') {
+        openRowMenu(b, [
+          {
+            label: 'Восстановить вложение',
+            onClick: async () => {
+              const r2 = await api('PATCH', '/api/report?resource=investments', { id, action: 'restore' });
+              deps.toast(r2.ok ? 'Вложение восстановлено' : errMsg(r2), !r2.ok);
+              if (r2.ok) loadInvestments();
+            },
+          },
+        ]);
+        return;
+      }
       openRowMenu(b, [
         {
           label: 'Изменить вложение',

@@ -31,6 +31,10 @@ module.exports = handler(async (req, res) => {
     // как в отчёте: у продажи без sale_id номером служит id первой строки
     where.push(`type='out' AND COALESCE(sale_id, id)=$${params.length}`);
   }
+  // Удалённые (отменённые) документы видит только администратор; у остальных они скрыты.
+  if (req.user.role !== 'admin') {
+    where.push(`status='active'`);
+  }
   params.push(bySale ? 500 : limit);
   const rows = await query(
     `SELECT device, id, sale_id, to_char(ts,'YYYY-MM-DD HH24:MI:SS') AS ts, type, grade, gross_kg, tare_kg, net_kg, manual, worker, note,

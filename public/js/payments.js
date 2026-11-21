@@ -103,7 +103,7 @@ export async function loadPayments() {
         </div>
         <div class="r" style="display:flex;align-items:center;gap:6px;flex:none">
           <span style="font-weight:700;white-space:nowrap;color:${amtColor}">${isIn ? '+' : '−'}${money(x.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></span>
-          ${!cancelled && isAdmin() ? moreBtnHtml(`data-pm-menu="${x.id}"`, 'Действия') : ''}
+          ${isAdmin() ? moreBtnHtml(`data-pm-menu="${x.id}"`, 'Действия') : ''}
         </div>
       </div>`;
   }).join('') || '<div class="empty">Оплат за выбранный период нет</div>';
@@ -112,6 +112,21 @@ export async function loadPayments() {
     b.onclick = (e) => {
       e.stopPropagation();
       const id = Number(b.dataset.pmMenu);
+      const item = items.find((x) => x.id === id);
+      if (!item) return;
+      if (item.status === 'cancelled') {
+        openRowMenu(b, [
+          {
+            label: 'Восстановить оплату',
+            onClick: async () => {
+              const r2 = await api('PATCH', '/api/report?resource=payments', { id, action: 'restore' });
+              deps.toast(r2.ok ? 'Оплата восстановлена' : errMsg(r2), !r2.ok);
+              if (r2.ok) loadPayments();
+            },
+          },
+        ]);
+        return;
+      }
       openRowMenu(b, [
         {
           label: 'Отменить оплату',

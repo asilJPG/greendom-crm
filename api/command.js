@@ -32,7 +32,9 @@ module.exports = handler(
 
     const b = req.body || {};
     const kind = String(b.kind || '');
-    if (kind === 'edit' && req.user.role !== 'admin') return res.status(403).json({ error: 'править записи может только администратор' });
+    if (['edit', 'restore_movement', 'restore_sale'].includes(kind) && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'править и восстанавливать записи может только администратор' });
+    }
 
     const gradeRows = await query('SELECT name FROM grades WHERE active ORDER BY sort_order, id');
     const payload = cleanPayload(kind, b.payload || {}, gradeRows.map((g) => g.name));

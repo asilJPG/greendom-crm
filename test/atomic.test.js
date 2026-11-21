@@ -18,8 +18,11 @@ const db = globalThis.__TEST_DB;
 
 const setup = require('../api/setup');
 const login = require('../api/login');
+const usersApi = require('../api/users');
 const report = require('../api/report');
 const status = require('../api/status');
+const movementsApi = require('../api/movements');
+const commandApi = require('../api/command');
 const ingest = require('../api/ingest');
 const { todayStr } = require('../lib/http');
 
@@ -275,4 +278,68 @@ test('ingest: корректные пачки моноблока принима�
   assert.equal(byId[14].ts, '2024-02-29 08:30:00');
   assert.ok(byId[16].cancelled_ts);
   assert.equal(byId[17].cancelled_ts, null);
+});
+
+test('удалённые документы видит только админ; у остальных скрыты; админ может восстановить любой документ', async () => {
+  // Создаём директора для проверки видимости
+  const dirPw = 'director-vis-pw-1';
+  assert.equal((await call(usersApi, { method: 'POST', headers: { cookie }, body: { name: 'Директор-видимость', role: 'director', password: dirPw } })).code, 200);
+  const dirLogin = await call(login, { method: 'POST', body: { password: dirPw } });
+  assert.equal(dirLogin.code, 200);
+  const dirCookie = String(dirLogin.headers['Set-Cookie']).split(';')[0];
+
+  // 1. Создаём и отменяем складскую операцию (приход + продажу), расход, оплату, инвестицию
+  assert.equal((await call(commandApi, { method: 'POST', headers: { cookie }, body: { kind: 'intake', payload: { grade: 'Высший', net_kg: 10, worker: 'Тест' } } })).code, 200);
+  const saleRes = await call(commandApi, { method: 'POST', headers: { cookie }, body: { kind: 'sale', payload: { customer: 'Атом-покупатель', items: [{ grade: 'Высший', net_kg: 3, price_per_kg: 10000, amount: 30000 }] } } });
+  assert.equal(saleRes.code, 200);
+  const saleRow = await one(`SELECT id, sale_id FROM movements WHERE device='web' AND type='out' ORDER BY id DESC LIMIT 1`);
+  assert.equal((await call(commandApi, { method: 'POST', headers: { cookie }, body: { kind: 'cancel_sale', payload: { id: saleRow.sale_id, device: 'web', reason: 'ошибка продажи' } } })).code, 200);
+
+  const cat = await one(`SELECT id FROM expense_categories WHERE active LIMIT 1`);
+  const expRes = await fin('expenses', 'POST', { doc_date: today, category_id: cat.id, amount: 5000, comment: 'удаляемый акт' });
+  assert.equal(expRes.code, 200);
+  assert.equal((await fin('expenses', 'PATCH', { id: expRes.body.id, reason: 'ошибка' })).code, 200);
+
+  const payRes = await fin('payments', 'POST', { doc_date: today, counterparty: 'Атом-покупатель', direction: 'in', amount: 7000 });
+  assert.equal(payRes.code, 200);
+  assert.equal((await fin('payments', 'PATCH', { id: payRes.body.id, reason: 'ошибка' })).code, 200);
+
+  const invRes = await fin('investments', 'POST', { doc_date: today, title: 'Удаляемая инвестиция', amount: 9000 });
+  assert.equal(invRes.code, 200);
+  assert.equal((await fin('investments', 'PATCH', { id: invRes.body.id, reason: 'ошибка' })).code, 200);
+
+  // 2. Директор НЕ видит ни одного отменённого документа
+  const dirMov = await call(movementsApi, { query: { limit: '200' }, headers: { cookie: dirCookie } });
+  assert.equal(dirMov.body.some((x) => x.status === 'cancelled'), false, 'директор не видит отменённые движения');
+  const dirExp = await call(report, { query: { resource: 'expenses', from: today, to: today }, headers: { cookie: dirCookie } });
+  assert.equal(dirExp.body.items.some((x) => x.status === 'cancelled'), false, 'директор не видит отменённые расходы');
+  const dirPay = await call(report, { query: { resource: 'payments', from: today, to: today }, headers: { cookie: dirCookie } });
+  assert.equal(dirPay.body.items.some((x) => x.status === 'cancelled'), false, 'директор не видит отменённые оплаты');
+  const dirInv = await call(report, { query: { resource: 'investments' }, headers: { cookie: dirCookie } });
+  assert.equal(dirInv.body.items.some((x) => x.status === 'cancelled'), false, 'директор не видит отменённые инвестиции');
+
+  // 3. Админ ВИДИТ все отменённые документы
+  const admMov = await call(movementsApi, { query: { limit: '200' }, headers: { cookie } });
+  assert.equal(admMov.body.some((x) => x.device === 'web' && x.sale_id === saleRow.sale_id && x.status === 'cancelled'), true);
+  const admExp = await call(report, { query: { resource: 'expenses', from: today, to: today }, headers: { cookie } });
+  assert.equal(admExp.body.items.some((x) => x.id === expRes.body.id && x.status === 'cancelled'), true);
+  const admPay = await call(report, { query: { resource: 'payments', from: today, to: today }, headers: { cookie } });
+  assert.equal(admPay.body.items.some((x) => x.id === payRes.body.id && x.status === 'cancelled'), true);
+  const admInv = await call(report, { query: { resource: 'investments' }, headers: { cookie } });
+  assert.equal(admInv.body.items.some((x) => x.id === invRes.body.id && x.status === 'cancelled'), true);
+
+  // 4. Админ восстанавливает все документы; они снова активны и видны директору
+  assert.equal((await call(commandApi, { method: 'POST', headers: { cookie }, body: { kind: 'restore_sale', payload: { id: saleRow.sale_id, device: 'web' } } })).code, 200);
+  assert.equal((await fin('expenses', 'PATCH', { id: expRes.body.id, action: 'restore' })).code, 200);
+  assert.equal((await fin('payments', 'PATCH', { id: payRes.body.id, action: 'restore' })).code, 200);
+  assert.equal((await fin('investments', 'PATCH', { id: invRes.body.id, action: 'restore' })).code, 200);
+
+  const dirMovAfter = await call(movementsApi, { query: { limit: '200' }, headers: { cookie: dirCookie } });
+  assert.equal(dirMovAfter.body.some((x) => x.device === 'web' && x.sale_id === saleRow.sale_id && x.status === 'active'), true);
+  const dirExpAfter = await call(report, { query: { resource: 'expenses', from: today, to: today }, headers: { cookie: dirCookie } });
+  assert.equal(dirExpAfter.body.items.some((x) => x.id === expRes.body.id && x.status === 'active'), true);
+  const dirPayAfter = await call(report, { query: { resource: 'payments', from: today, to: today }, headers: { cookie: dirCookie } });
+  assert.equal(dirPayAfter.body.items.some((x) => x.id === payRes.body.id && x.status === 'active'), true);
+  const dirInvAfter = await call(report, { query: { resource: 'investments' }, headers: { cookie: dirCookie } });
+  assert.equal(dirInvAfter.body.items.some((x) => x.id === invRes.body.id && x.status === 'active'), true);
 });

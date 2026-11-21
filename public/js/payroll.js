@@ -165,7 +165,7 @@ export async function loadPayroll() {
         </div>
         <div class="r" style="display:flex;align-items:center;gap:6px;flex:none">
           <span style="font-weight:700;white-space:nowrap">${money(p.amount)} <span class="small muted" style="font-weight:500">${esc(cur)}</span></span>
-          ${!cancelled && admin ? moreBtnHtml(`data-pr-menu="${p.id}"`, 'Действия') : ''}
+          ${admin ? moreBtnHtml(`data-pr-menu="${p.id}"`, 'Действия') : ''}
         </div>
       </div>`;
   }).join('') || '<div class="empty">Выплат за выбранный период нет</div>';
@@ -174,6 +174,20 @@ export async function loadPayroll() {
     b.onclick = (e) => {
       e.stopPropagation();
       const id = Number(b.dataset.prMenu);
+      const item = payments.find((x) => x.id === id);
+      if (item && item.status === 'cancelled') {
+        openRowMenu(b, [
+          {
+            label: 'Восстановить выплату',
+            onClick: async () => {
+              const r2 = await api('PATCH', '/api/report?resource=payroll', { target: 'payout', id, action: 'restore' });
+              deps.toast(r2.ok ? 'Выплата восстановлена' : errMsg(r2), !r2.ok);
+              if (r2.ok) loadPayroll();
+            },
+          },
+        ]);
+        return;
+      }
       openRowMenu(b, [
         {
           label: 'Отменить выплату',

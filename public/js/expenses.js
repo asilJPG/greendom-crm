@@ -263,13 +263,15 @@ function buildActSheetHtml(x) {
 
 function openActViewPage(x) {
   viewingAct = x;
-  // Директор — только просмотр; создавать, менять и отменять акты может только администратор
+  // Директор — только просмотр; создавать, менять, отменять и восстанавливать акты может только администратор
   const canEdit = x.status === 'active' && isAdmin();
   const canCancel = x.status === 'active' && isAdmin();
+  const canRestore = x.status === 'cancelled' && isAdmin();
   $('ev-title').textContent = `Акт расхода №${x.id}`;
   $('ev-sheet').innerHTML = buildActSheetHtml(x);
   $('ev-edit-btn').hidden = !canEdit;
   $('ev-cancel-btn').hidden = !canCancel;
+  $('ev-restore-btn').hidden = !canRestore;
   showExpView('view');
 }
 
@@ -437,6 +439,18 @@ export function initExpenses(config) {
     if (!viewingAct) return;
     $('print-root').innerHTML = buildActSheetHtml(viewingAct);
     window.print();
+  };
+  $('ev-restore-btn').onclick = async () => {
+    const b = $('ev-restore-btn');
+    if (!viewingAct || b.disabled || !isAdmin()) return;
+    b.disabled = true;
+    try {
+      const r = await api('PATCH', '/api/report?resource=expenses', { target: 'expense', id: viewingAct.id, action: 'restore' });
+      deps.toast(r.ok ? 'Акт восстановлен' : errMsg(r), !r.ok);
+      if (r.ok) await loadExpenses();
+    } finally {
+      b.disabled = false;
+    }
   };
   $('ev-cancel-btn').onclick = async () => {
     const b = $('ev-cancel-btn');

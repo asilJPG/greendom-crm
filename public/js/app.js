@@ -477,15 +477,19 @@ function renderSaleCart() {
 const isWebRow = (m) => m.device === 'web';
 function rowPerms(m) {
   const me = state.me;
-  const active = m.status !== 'cancelled';
-  if (!me || !active) return { invoice: false, edit: false, cancel: false };
+  if (!me) return { invoice: false, edit: false, cancel: false, restore: false };
   const admin = me.role === 'admin';
-  return { invoice: m.type === 'out', edit: admin, cancel: admin };
+  const active = m.status !== 'cancelled';
+  if (!active) {
+    // Отменённую запись видит только админ: может открыть накладную и восстановить документ
+    return { invoice: admin && m.type === 'out', edit: false, cancel: false, restore: admin };
+  }
+  return { invoice: m.type === 'out', edit: admin, cancel: admin, restore: false };
 }
 
 function hasRowActions(m) {
   const p = rowPerms(m);
-  return p.invoice || p.edit || p.cancel;
+  return p.invoice || p.edit || p.cancel || p.restore;
 }
 
 async function openSaleInvoice(m) {
@@ -532,6 +536,15 @@ function buildHistMenuItems(m) {
         });
         if (!reason) return;
         await sendCmd(m.sale_id ? 'cancel_sale' : 'cancel_movement', { id: m.sale_id || m.id, device: m.device, reason });
+      },
+    });
+  }
+  if (p.restore) {
+    const title = m.sale_id ? 'Восстановить продажу' : 'Восстановить запись';
+    items.push({
+      label: title,
+      onClick: async () => {
+        await sendCmd(m.sale_id ? 'restore_sale' : 'restore_movement', { id: m.sale_id || m.id, device: m.device });
       },
     });
   }
