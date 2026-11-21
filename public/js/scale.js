@@ -166,12 +166,21 @@ function tryParseStreamLine(line, sess) {
 function updateStreamWeight(val, flagStable, sess) {
   const now = Date.now();
   sess.lastStreamAt = now;
+  // Эти весы работают в потоковом/событийном режиме (не CAS AD ENQ/DC1) —
+  // отключаем опрос ENQ, чтобы он не сбрасывал вес в «Нет ответа» через 2.5 сек!
+  if (!sess.isStream) {
+    sess.isStream = true;
+    clearInterval(sess.pollTimer);
+    sess.pollTimer = null;
+  }
   state.online = true;
   state.gross = val;
   if (flagStable !== null) {
+    clearTimeout(sess.stableTimer);
     state.stable = flagStable;
   } else {
-    // Если весы не присылают флаг ST/US — считаем вес устоявшимся, если он не меняется 1.2 сек
+    // Если весы не присылают флаг ST/US — считаем вес устоявшимся через 1.2 сек без изменений
+    clearTimeout(sess.stableTimer);
     if (Math.abs(val - (sess.lastVal ?? NaN)) <= 0.015) {
       if (!sess.stableSince) sess.stableSince = now;
       state.stable = now - sess.stableSince >= 1200;
@@ -180,14 +189,20 @@ function updateStreamWeight(val, flagStable, sess) {
       state.stable = false;
     }
     sess.lastVal = val;
+    if (!state.stable && val >= 0.02) {
+      sess.stableTimer = setTimeout(() => {
+        if (!sess.closing && SC.sess === sess && state.online && Math.abs(state.gross - val) <= 0.015) {
+          state.stable = true;
+          renderDisplay();
+        }
+      }, 1200);
+    }
   }
   renderDisplay();
 }
 
 async function pollOnce(sess) {
-  if (sess.closing || sess.polling || SC.sess !== sess) return;
-  // Если весы сами шлют поток (stream), не мешаем им опросом ENQ/DC1
-  if (sess.lastStreamAt && Date.now() - sess.lastStreamAt < 2500) return;
+  if (sess.closing || sess.polling || sess.isStream || SC.sess !== sess) return;
   sess.polling = true;
   try {
     sess.buf.length = 0;
@@ -226,6 +241,7 @@ function closeSession(sess, { fromLoop = false } = {}) {
   if (sess.closingPromise) return sess.closingPromise;
   sess.closing = true;
   clearInterval(sess.pollTimer);
+  clearTimeout(sess.stableTimer);
   if (SC.sess === sess) {
     SC.sess = null;
     state.online = false;
