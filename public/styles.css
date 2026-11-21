@@ -489,3 +489,26 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
 
 /* Неверное число в поле ввода (вес, цена, сумма) */
 .bad-input, input[aria-invalid="true"] { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(177, 54, 45, .15); }
+
+/* ───── Экранная цифровая клавиатура (моноблок ?kiosk=1) ───── */
+.numpad {
+  position: fixed; right: 20px; bottom: 20px; z-index: 120;
+  width: min(360px, calc(100vw - 24px));
+  background: #fff; border: 1px solid rgba(0, 0, 0, .14); border-radius: 18px;
+  padding: 14px; box-shadow: 0 20px 56px rgba(0, 0, 0, .24), 0 4px 12px rgba(0, 0, 0, .08);
+  user-select: none; touch-action: manipulation;
+}
+.np-head { display: flex; align-items: center; gap: 10px; padding: 2px 4px 12px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.np-lbl { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); }
+.np-val { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 26px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-close { width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); color: var(--ink2); font-size: 18px; cursor: pointer; flex: none; }
+.np-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.np-grid button {
+  min-height: 62px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--soft); color: var(--ink); font-size: 24px; font-weight: 700;
+  cursor: pointer; transition: background .08s, transform .06s;
+}
+.np-grid button:active { transform: scale(.96); background: var(--soft2); }
+.np-grid button.np-fn { background: #fff; font-size: 20px; font-weight: 600; color: var(--ink2); }
+.np-grid button.np-ok { grid-column: span 2; background: var(--btn); color: #fff; border-color: var(--btn); font-size: 18px; font-weight: 600; }
+.np-grid button.np-ok:active { opacity: .9; }

@@ -9,6 +9,7 @@ import { initRefs, loadRefs } from './refs.js';
 import { initCounterparties, loadCounterparties } from './counterparties.js';
 import { initInvestments, loadInvestments } from './investments.js';
 import { editBtnHtml, moreBtnHtml, openRowMenu } from './ui.js';
+import { initNumpad } from './numpad.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1013,6 +1014,7 @@ $('ed-ok').onclick = async () => {
 };
 
 clearInvalidOnInput();
+initNumpad();
 initScale(toast);
 initInvoice(toast);
 initReport({
