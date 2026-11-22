@@ -171,8 +171,13 @@
                 <div><label class="f" for="sl-price">Цена за кг</label><input id="sl-price" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div>
                 <div><label class="f" for="sl-amt-ov">Сумма (авто или вручную)</label><input id="sl-amt-ov" type="text" inputmode="decimal" autocomplete="off" placeholder="авто"></div>
               </div>
+              <div class="sl-round" id="sl-round">
+                <label class="rt"><input type="checkbox" id="sl-round-on"> Скидка весом</label>
+                <span class="rt-opt">до <input id="sl-round-step" type="text" inputmode="numeric" autocomplete="off" value="100" aria-label="Шаг округления, г"> г</span>
+                <span class="rt-opt"><input id="sl-free-g" type="text" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="Бесплатно, г"> г бесплатно</span>
+              </div>
               <div class="small" id="sl-live" aria-live="polite" style="min-height:18px"></div>
-              <button class="btn sec block touch" type="button" id="sl-add-pos">+ Взвесить и добавить позицию</button>
+              <button class="btn sec block touch" type="button" id="sl-add-pos">+ Добавить позицию</button>
               <div class="stack" id="sl-cart"></div>
               <input id="sl-note" placeholder="Заметка к продаже (необязательно)">
               <div class="sale-foot">

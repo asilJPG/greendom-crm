@@ -714,3 +714,104 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
   body.ops-mode .sale-foot > div > span { display: block; font-size: 12.5px; }
   body.ops-mode #sl-total { display: block; font-size: 19px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* ───── Моноблок: вес на всю ширину сверху (мега-крупно), форма полосой внизу ─────
+   Табло занимает всё место, что осталось над формой; размер цифр считается и от ширины,
+   и от высоты табло (контейнерные единицы cqi/cqh), так что ничего не вылезает и прокрутки нет. */
+@media (min-width: 1000px) {
+  body.ops-mode .ops-wrap { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 12px; }
+  body.ops-mode .scale-col { height: 100%; min-height: 0; }
+  body.ops-mode .scale-panel {
+    container-type: size; display: grid; height: 100%;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    align-items: center; column-gap: 18px; padding: 12px 20px;
+  }
+  body.ops-mode .sc-cap, body.ops-mode .sc-ctx, body.ops-mode .sc-digits, body.ops-mode .sc-stat { grid-column: 1 / -1; justify-self: center; }
+  body.ops-mode .sc-digits { font-size: max(56px, min(23.5cqi, calc(100cqh - 190px))); margin: 0; align-self: center; }
+  body.ops-mode .sc-stat { margin-bottom: 8px; }
+  body.ops-mode .sc-manual-box { grid-column: 1; margin: 0; padding-top: 8px; }
+  body.ops-mode .sc-meta { grid-column: 2; margin: 0; padding-top: 8px; }
+  body.ops-mode .scale-panel .acts { grid-column: 3; margin: 0 !important; padding-top: 8px; align-self: end; }
+  body.ops-mode .sc-manual-box label { font-size: 12px; margin-bottom: 4px; }
+
+  body.ops-mode .ops-main { height: auto; max-height: 52vh; overflow-y: auto; }
+  body.ops-mode .ops-main h1.page { display: none; }
+  body.ops-mode #p-sale { height: auto; display: block; }
+  body.ops-mode .ops-main .card { padding: 12px 16px; }
+  body.ops-mode .ops-main .stack > * + * { margin-top: 0; }
+
+  /* Приход: сорта | заметка | кнопка */
+  body.ops-mode #f-intake { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(160px, 1fr) minmax(200px, 260px); gap: 14px; align-items: end; }
+  /* Списание: сорта | причина | комментарий | кнопка */
+  body.ops-mode #f-writeoff { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(150px, .8fr) minmax(180px, 220px); gap: 14px; align-items: end; }
+  body.ops-mode #f-writeoff .cust-chips { flex-wrap: wrap; overflow: visible; }
+  /* Продажа: покупатель и сорт | цена и «добавить» | позиции, итог и кнопка */
+  body.ops-mode #f-sale {
+    display: grid; gap: 10px 16px; align-items: start;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-areas: "cust price cart" "grades add cart" "note live foot";
+  }
+  body.ops-mode #f-sale > div:nth-child(1) { grid-area: cust; min-width: 0; }
+  body.ops-mode #f-sale > div:nth-child(2) { grid-area: grades; min-width: 0; }
+  body.ops-mode #f-sale > .daterow { grid-area: price; }
+  body.ops-mode #f-sale > #sl-add-pos { grid-area: add; }
+  body.ops-mode #f-sale > #sl-live { grid-area: live; align-self: center; }
+  body.ops-mode #f-sale > #sl-cart { grid-area: cart; max-height: 170px; min-height: 0; overflow-y: auto; align-self: stretch; }
+  body.ops-mode #f-sale > #sl-note { grid-area: note; }
+  body.ops-mode #f-sale > .sale-foot { grid-area: foot; }
+  body.ops-mode #f-sale > #sl-cart:empty::before { content: "Позиции появятся здесь"; display: block; color: var(--mut); font-size: 13px; padding: 10px 0; }
+}
+@media (min-width: 1000px) {
+  /* Продажа полосой в 2 строки: покупатель | сорта | цена | позиции  /  заметка | сорта | «добавить» | итог */
+  body.ops-mode #f-sale {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.2fr);
+    grid-template-areas: "cust grades price cart" "note grades add foot";
+    align-items: end;
+  }
+  body.ops-mode #f-sale > #sl-live { display: none; }
+  body.ops-mode #f-sale > #sl-cart { max-height: 96px; align-self: stretch; }
+  body.ops-mode #f-sale > div:nth-child(2) { align-self: stretch; display: flex; flex-direction: column; }
+  body.ops-mode #f-sale > div:nth-child(2) .grade-grid { flex: 1; }
+  body.ops-mode #f-sale .daterow label.f, body.ops-mode #sl-add-pos { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.ops-mode #sl-add-pos { font-size: 14.5px; padding-left: 10px; padding-right: 10px; }
+  /* плитки сортов ниже (все экраны операций) */
+  body.ops-mode .gtile { min-height: 0; padding: 7px 10px; }
+  body.ops-mode .gtile::before { width: 20px; height: 3px; margin-bottom: 4px; }
+  body.ops-mode .gtile b { font-size: 15px; }
+  body.ops-mode .gtile small { font-size: 11.5px; }
+}
+@media (min-width: 1000px) {
+  body.ops-mode #f-sale { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, .95fr) minmax(0, 1.5fr); }
+  body.ops-mode #f-sale .grade-grid { grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 6px; }
+  body.ops-mode .sale-foot { grid-template-columns: minmax(110px, 1fr) auto; gap: 10px; }
+  body.ops-mode #sl-total { font-size: 17px !important; }
+  body.ops-mode .sale-foot #sl-go { padding-left: 16px; padding-right: 16px; white-space: nowrap; }
+}
+@media (min-width: 1000px) {
+  body.ops-mode #f-sale { grid-template-columns: minmax(0, .85fr) minmax(0, 1.55fr) minmax(0, .9fr) minmax(0, 1.4fr); }
+  body.ops-mode .gtile b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+  body.ops-mode .gtile small { overflow-wrap: normal; line-height: 1.25; }
+}
+@media (min-width: 1000px) {
+  body.ops-mode #f-writeoff { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.45fr) minmax(130px, .75fr) minmax(150px, 190px); }
+  body.ops-mode #f-writeoff .cust-chips { flex-wrap: nowrap; overflow-x: auto; }
+  body.ops-mode #f-writeoff .cust-chips .chip { flex: none; padding: 6px 12px; }
+}
+@media (min-width: 1000px) {
+  body.ops-mode .ops-main .grade-grid { grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 6px; }
+  body.ops-mode #f-writeoff { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1.25fr) minmax(120px, .7fr) minmax(140px, 180px); }
+}
+
+/* Скидка весом в пользу покупателя (экран продажи) */
+.sl-round { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 14px; color: var(--ink2); }
+.sl-round .rt { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.sl-round .rt input { width: 20px; height: 20px; min-height: 0; padding: 0; accent-color: #1b1b1b; }
+.sl-round .rt-opt { display: inline-flex; align-items: center; gap: 6px; }
+.sl-round .rt-opt input { width: 74px; min-height: 38px; padding: 6px 10px; text-align: right; font-size: 16px; }
+.sl-round:not(.on) .rt-opt { opacity: .45; }
+@media (min-width: 1000px) {
+  body.ops-mode #f-sale { grid-template-areas: "cust grades price cart" "round round add cart" "note note foot foot"; }
+  body.ops-mode #f-sale > #sl-round { grid-area: round; align-self: center; flex-wrap: nowrap; }
+  body.ops-mode #f-sale > #sl-cart { max-height: 130px; }
+}

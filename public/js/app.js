@@ -454,8 +454,8 @@ function renderSaleCart() {
   box.innerHTML = state.saleCart.map((it, idx) => `
     <div class="sale-line">
       <div>
-        <b>${esc(it.grade)}</b> · ${kg(it.net_kg)} кг
-        <div class="small muted">${it.price_per_kg != null ? `${money(it.price_per_kg)} ${esc(state.cur)}/кг` : 'цена не указана'}</div>
+        <b>${esc(it.grade)}</b> · ${kg(round3(it.net_kg - (it.free_kg || 0)))} кг
+        <div class="small muted">${it.price_per_kg != null ? `${money(it.price_per_kg)} ${esc(state.cur)}/кг` : 'цена не указана'}${it.free_kg > 0 ? ` · взвешено ${kg(it.net_kg)}, скидка ${Math.round(it.free_kg * 1000)} г` : ''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <b>${money(it.amount)} ${esc(state.cur)}</b>
@@ -979,10 +979,49 @@ $('sl-new-cust').onclick = async () => {
   }
 };
 
+// ── Скидка весом в пользу покупателя: вес округляется вниз до шага (по умолчанию 100 г), разница — бесплатно.
+// Включается переключателем на экране продажи (запоминается на этом устройстве); граммы можно вписать вручную.
+// Со склада уходит весь взвешенный вес, покупатель платит за вес минус скидку, скидка идёт в отчёт как потеря.
+const ROUND_KEY = 'saleRound';
+function loadRound() {
+  try { const r = JSON.parse(localStorage.getItem(ROUND_KEY)); if (r && typeof r.on === 'boolean') return { on: r.on, step: Number(r.step) > 0 ? Number(r.step) : 100 }; } catch {}
+  return { on: false, step: 100 };
+}
+function saveRound() { try { localStorage.setItem(ROUND_KEY, JSON.stringify(state.round)); } catch {} }
+state.round = loadRound();
+state.freeManual = false;
+function paintRound() {
+  $('sl-round').classList.toggle('on', state.round.on);
+  $('sl-round-on').checked = state.round.on;
+  $('sl-round-step').disabled = !state.round.on;
+  $('sl-free-g').disabled = !state.round.on;
+  if (!state.round.on) $('sl-free-g').value = '';
+}
+$('sl-round-step').value = String(state.round.step);
+paintRound();
+$('sl-round-on').onchange = () => { state.round.on = $('sl-round-on').checked; state.freeManual = false; saveRound(); paintRound(); };
+$('sl-round-step').oninput = () => {
+  const v = parseInt($('sl-round-step').value, 10);
+  if (v >= 1 && v <= 1000) { state.round.step = v; saveRound(); }
+  state.freeManual = false;
+};
+$('sl-free-g').oninput = () => { state.freeManual = $('sl-free-g').value.trim() !== ''; };
+// Сколько граммов отдаём бесплатно для веса netKg: вписано вручную или остаток от округления вниз до шага.
+function freeGrams(netKg) {
+  if (!state.round.on) return { ok: true, g: 0 };
+  if (state.freeManual) {
+    const v = parseDecimal($('sl-free-g').value);
+    if (v === null) return { ok: true, g: 0 };
+    if (!Number.isFinite(v) || v < 0) return { ok: false, error: 'Неверная скидка весом (граммы). Пример: 85' };
+    return { ok: true, g: Math.round(v) };
+  }
+  return { ok: true, g: Math.round(netKg * 1000) % state.round.step };
+}
+
 // Живой подсчёт суммы позиции: вес × цена видно сразу, ещё до «Взвесить и добавить позицию».
 function updateSaleLive() {
   const live = $('sl-live'), ovEl = $('sl-amt-ov');
-  if (!live || !live.offsetParent) return; // экран продажи не открыт
+  if (!live || state.tab !== 'sale' || $('ops-shell').hidden) return; // экран продажи не открыт
   const price = parseDecimal($('sl-price').value), ov = parseDecimal(ovEl.value);
   const w = getActiveWeightKg();
   const cartTotal = state.saleCart.reduce((a, i) => a + Number(i.amount || 0), 0);
@@ -991,13 +1030,23 @@ function updateSaleLive() {
     pos = round2(ov);
     text = `Сумма позиции (вручную): <b>${money(pos)} ${esc(state.cur)}</b>`;
   } else if (w.ok && price !== null && Number.isFinite(price) && price > 0) {
-    pos = round2(w.net * price);
-    text = `${kg(w.net)} кг × ${money(price)} = <b>${money(pos)} ${esc(state.cur)}</b>`;
+    const fr = freeGrams(w.net);
+    const freeG = fr.ok && fr.g < Math.round(w.net * 1000) ? fr.g : 0;
+    const billed = round3(w.net - freeG / 1000);
+    pos = round2(billed * price);
+    text = freeG > 0
+      ? `${kg(w.net)} кг − ${freeG} г = ${kg(billed)} кг × ${money(price)} = <b>${money(pos)} ${esc(state.cur)}</b>`
+      : `${kg(w.net)} кг × ${money(price)} = <b>${money(pos)} ${esc(state.cur)}</b>`;
   } else if (price !== null && Number.isFinite(price) && price > 0) {
     text = `<span class="muted">${esc(w.error || 'Нет веса')}</span>`;
   }
+  // автоподстановка бесплатных граммов, пока оператор не вписал своё
+  if (state.round.on && !state.freeManual) {
+    const auto = w.ok ? String(freeGrams(w.net).g) : '';
+    if ($('sl-free-g').value !== auto && document.activeElement !== $('sl-free-g')) $('sl-free-g').value = auto;
+  }
   ovEl.placeholder = pos !== null && !(ov !== null) ? `авто: ${money(pos)}` : 'авто';
-  live.innerHTML = text ? `${text}${pos !== null ? ' <span class="muted">· нажмите «Взвесить и добавить позицию»</span>' : ''}` : '';
+  live.innerHTML = text ? `${text}${pos !== null ? ' <span class="muted">· нажмите «Добавить позицию»</span>' : ''}` : '';
   $('sl-total').textContent = pos !== null
     ? `${money(cartTotal)} ${state.cur} (+ ${money(pos)} не добавлено)`
     : `${money(cartTotal)} ${state.cur}`;
@@ -1045,11 +1094,20 @@ $('sl-add-pos').onclick = () => {
   }
   const w = getActiveWeightKg();
   if (!w.ok) return toast(w.error, true);
-  const amount = ov.value !== null ? round2(ov.value) : round2(w.net * price);
+  const fr = freeGrams(w.net);
+  if (!fr.ok) { $('sl-free-g').classList.add('bad-input'); return toast(fr.error, true); }
+  if (fr.g >= Math.round(w.net * 1000)) { $('sl-free-g').classList.add('bad-input'); return toast('Скидка весом должна быть меньше веса позиции', true); }
+  const freeKg = round3(fr.g / 1000);
+  const billed = round3(w.net - freeKg);
+  const amount = ov.value !== null ? round2(ov.value) : round2(billed * price);
   if (!Number.isFinite(amount) || amount < 0) return toast('Неверная сумма', true);
-  if (amount === 0 && !confirm(`Позиция «${state.selGrade.sl}» ${kg(w.net)} кг на сумму 0 ${state.cur}. Добавить бесплатно?`)) return;
-  state.saleCart.push({ grade: state.selGrade.sl, net_kg: w.net, price_per_kg: price, amount });
-  camFlash('Позиция добавлена', `${kg(w.net)} кг`, `${state.selGrade.sl} · ${money(amount)} ${state.cur}`, 2500);
+  if (amount === 0 && !confirm(`Позиция «${state.selGrade.sl}» ${kg(billed)} кг на сумму 0 ${state.cur}. Добавить бесплатно?`)) return;
+  state.saleCart.push({ grade: state.selGrade.sl, net_kg: w.net, free_kg: freeKg, price_per_kg: price, amount });
+  camFlash('Позиция добавлена', `${kg(billed)} кг`,
+    `${state.selGrade.sl}${freeKg > 0 ? ` · скидка ${fr.g} г` : ''} · ${money(amount)} ${state.cur}`, 2500);
+  state.freeManual = false;
+  $('sl-free-g').value = '';
+  $('sl-free-g').classList.remove('bad-input');
   $('sl-amt-ov').value = '';
   clearManualWeight();
   renderSaleCart();
@@ -1060,7 +1118,7 @@ guard($('sl-go'), async (id) => {
   if (!state.saleCart.length) { toast('Добавьте хотя бы одну позицию', true); return false; }
   const total = round2(state.saleCart.reduce((a, i) => a + Number(i.amount || 0), 0));
   if (total <= 0 && !confirm(`Сумма продажи 0 ${state.cur}. Провести продажу без оплаты?`)) return false;
-  const totalKg = round3(state.saleCart.reduce((a, i) => a + Number(i.net_kg || 0), 0));
+  const totalKg = round3(state.saleCart.reduce((a, i) => a + Number(i.net_kg || 0) - Number(i.free_kg || 0), 0));
   const ok = await sendCmd('sale', { customer: state.selCustomer, note: $('sl-note').value, items: state.saleCart }, id);
   if (ok) {
     camFlash('Продажа проведена', `${kg(totalKg)} кг`, `${state.selCustomer} · ${money(total)} ${state.cur}`);
