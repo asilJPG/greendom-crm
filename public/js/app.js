@@ -425,23 +425,31 @@ function renderOpsTiles() {
   }
 }
 
+// Покупатель продажи: крупная кнопка в форме → окно со всеми покупателями плитками и поиском.
 function renderCustomerChips() {
-  const box = $('sl-cust-chips');
-  if (!box) return;
   const list = state.customers;
-  if (state.selCustomer && !list.some((c) => c.name === state.selCustomer)) {
-    state.selCustomer = list[0] ? list[0].name : '';
-  }
-  box.innerHTML = list.map((c) =>
-    `<button type="button" class="chip${state.selCustomer === c.name ? ' sel' : ''}" data-c="${esc(c.name)}">${esc(c.name)}</button>`
-  ).join('') || '<div class="small muted">Нажмите «+ Новый», чтобы добавить первого покупателя</div>';
-  box.onclick = (e) => {
-    const b = e.target.closest('[data-c]');
-    if (!b) return;
-    state.selCustomer = b.dataset.c;
-    box.querySelectorAll('.chip').forEach((ch) => ch.classList.toggle('sel', ch === b));
-  };
+  if (state.selCustomer && !list.some((c) => c.name === state.selCustomer)) state.selCustomer = '';
+  $('sl-cust-name').textContent = state.selCustomer || (list.length ? 'Выберите покупателя' : 'Добавьте покупателя');
+  $('sl-cust-btn').classList.toggle('empty', !state.selCustomer);
+  renderCustGrid();
 }
+function renderCustGrid() {
+  const q = ($('cust-q').value || '').trim().toLowerCase();
+  const list = state.customers.filter((c) => !q || c.name.toLowerCase().includes(q));
+  $('cust-grid').innerHTML = list.map((c) =>
+    `<button type="button" class="cust-tile${c.name === state.selCustomer ? ' sel' : ''}" data-c="${esc(c.name)}">${esc(c.name)}</button>`
+  ).join('') || `<div class="small muted" style="padding:12px 2px">${q ? 'Никого не нашлось — добавьте нового покупателя' : 'Покупателей пока нет'}</div>`;
+}
+$('cust-grid').onclick = (e) => {
+  const b = e.target.closest('[data-c]');
+  if (!b) return;
+  state.selCustomer = b.dataset.c;
+  renderCustomerChips();
+  $('cust-dlg').close();
+};
+$('sl-cust-btn').onclick = () => { $('cust-q').value = ''; renderCustGrid(); $('cust-dlg').showModal(); };
+$('cust-q').oninput = renderCustGrid;
+$('cust-dlg-x').onclick = () => $('cust-dlg').close();
 
 function renderSaleCart() {
   const box = $('sl-cart');
@@ -973,6 +981,7 @@ $('sl-new-cust').onclick = async () => {
     if (!c) { const st = await api('GET', '/api/status'); if (st.ok) paintStatus(st.data); }
     state.selCustomer = c ? c.name : name;
     renderCustomerChips();
+    if ($('cust-dlg').open) $('cust-dlg').close();
     toast(r.data && r.data.duplicate ? 'Покупатель уже был добавлен' : 'Покупатель добавлен');
   } finally {
     btn.disabled = false;

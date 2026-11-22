@@ -160,11 +160,8 @@
             <p class="sub">Выберите покупателя, добавляйте взвешенные позиции и проведите продажу</p>
             <div class="card stack" id="f-sale">
               <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                  <label class="f" style="margin:0">Покупатель</label>
-                  <button class="btn sec sm" type="button" id="sl-new-cust">+ Новый</button>
-                </div>
-                <div class="cust-chips" id="sl-cust-chips"></div>
+                <label class="f">Покупатель</label>
+                <button class="cust-pick empty" type="button" id="sl-cust-btn"><span id="sl-cust-name">Выберите покупателя</span><span aria-hidden="true">▾</span></button>
               </div>
               <div><label class="f">Сорт позиции</label><div class="grade-grid" id="sl-grades"></div></div>
               <div class="daterow">
@@ -706,6 +703,14 @@
   </main>
   <nav class="mnav" id="mnav" aria-label="Быстрый доступ"></nav>
 </div>
+
+<!-- Выбор покупателя: крупные плитки и поиск (удобно пальцем на сенсорном моноблоке) -->
+<dialog id="cust-dlg" class="cust-dlg">
+  <div class="cd-head"><h3 style="margin:0">Покупатель</h3><button class="btn sec sm" type="button" id="cust-dlg-x" aria-label="Закрыть">✕</button></div>
+  <input id="cust-q" type="search" placeholder="Поиск по имени" autocomplete="off">
+  <div class="cust-grid" id="cust-grid"></div>
+  <button class="btn sec block" type="button" id="sl-new-cust">+ Новый покупатель</button>
+</dialog>
 
 <dialog id="menu-dlg">
   <h3 id="md-name">Пользователь</h3>

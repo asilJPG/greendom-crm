@@ -815,3 +815,21 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
   body.ops-mode #f-sale > #sl-round { grid-area: round; align-self: center; flex-wrap: nowrap; }
   body.ops-mode #f-sale > #sl-cart { max-height: 130px; }
 }
+
+/* Покупатель: крупная кнопка выбора и окно с плитками */
+.cust-pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 50px; padding: 10px 14px;
+  border: 2px solid #1b1b1b; border-radius: 12px; background: #fff; color: var(--ink); font-size: 17px; font-weight: 700; text-align: left; cursor: pointer; }
+.cust-pick span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cust-pick.empty { border-color: var(--line2); color: var(--mut); font-weight: 500; }
+.cust-pick:active { background: var(--soft); }
+dialog.cust-dlg { width: min(900px, 96vw); }
+.cust-dlg .cd-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.cust-dlg #cust-q { font-size: 17px; }
+.cust-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 12px 0; max-height: 56vh; overflow-y: auto; padding: 2px; }
+.cust-tile { min-height: 64px; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); background: #fff; color: var(--ink);
+  font-size: 17px; font-weight: 600; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.cust-tile:active { transform: scale(.98); }
+.cust-tile.sel { border-color: #1b1b1b; background: var(--soft); }
+@media (max-width: 640px) { .cust-grid { grid-template-columns: 1fr 1fr; max-height: 50vh; } .cust-tile { min-height: 56px; font-size: 16px; } }
+.cust-pick span:first-child { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; overflow-wrap: anywhere; }
+@media (min-width: 1000px) { body.ops-mode .cust-pick { font-size: 15.5px; min-height: 48px; padding: 8px 12px; } }
