@@ -229,6 +229,7 @@ function navigate(id, { push = true, replace = false } = {}) {
   ROUTES.forEach(([key]) => { const el = $('p-' + key); if (el) el.hidden = key !== ridTab; });
   const isOp = ridTab === 'intake' || ridTab === 'sale' || ridTab === 'writeoff';
   $('ops-shell').hidden = !isOp;
+  document.body.classList.toggle('ops-mode', isOp); // экраны операций: всё в высоту экрана, без прокрутки страницы
 
   clearInterval(state.opsTimer);
   closeDrawer();

@@ -640,3 +640,54 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
   /* экраны прихода/продажи/списания на моноблоке: на всю ширину, чтобы табло весов росло вместе с монитором */
   #ops-shell { max-width: 1800px; }
 }
+
+.sale-foot > * + * { margin-top: 12px; }
+@media (min-width: 1000px) { body.ops-mode .sale-foot > * + * { margin-top: 0; } }
+
+/* ───── Экраны операций на моноблоке: всё помещается в высоту экрана, страница не прокручивается ─────
+   Цифры весов подстраиваются и под ширину табло, и под высоту экрана; если в продаже много позиций,
+   прокручивается только их список. */
+@media (min-width: 1000px) {
+  body.ops-mode { overflow: hidden; }
+  body.ops-mode main { height: calc(100dvh - 52px); padding: 14px 24px; display: flex; flex-direction: column; overflow: hidden; }
+  body.ops-mode main > :not(#ops-shell):not([hidden]) { flex: none; }
+  body.ops-mode #ops-shell { flex: 1 1 auto; min-height: 0; width: 100%; }
+  body.ops-mode .ops-wrap { height: 100%; align-items: stretch; }
+  body.ops-mode .scale-col { position: static; height: 100%; min-height: 0; }
+  body.ops-mode .scale-panel { height: 100%; display: flex; flex-direction: column; justify-content: center; overflow: hidden; padding: 16px 26px; }
+  body.ops-mode .sc-digits { font-size: clamp(56px, min(22cqi, 19vh), 260px); margin: 6px 0 8px; }
+  body.ops-mode .sc-manual-box { margin-top: 8px; padding-top: 8px; }
+  body.ops-mode .sc-manual-box input { min-height: 44px; }
+  body.ops-mode .sc-meta { margin-top: 8px; padding-top: 8px; }
+  body.ops-mode .scale-panel .acts { margin-top: 8px !important; }
+  body.ops-mode .ops-main { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  body.ops-mode .ops-main h1.page { font-size: 24px; margin: 0 0 8px; }
+  body.ops-mode .ops-main .sub { display: none; }
+  body.ops-mode .ops-main .card { padding: 14px 16px; margin-bottom: 0; }
+  body.ops-mode .ops-main .stack > * + * { margin-top: 10px; }
+  body.ops-mode .ops-main input { min-height: 44px; }
+  body.ops-mode .gtile { min-height: 58px; padding: 10px 12px; }
+  body.ops-mode .gtile::before { margin-bottom: 6px; }
+  body.ops-mode .cust-chips .chip { min-height: 40px; padding: 6px 14px; }
+  body.ops-mode .btn.touch { min-height: 50px; }
+  /* продажа: форма на всю высоту колонки, список позиций забирает свободное место и прокручивается сам */
+  body.ops-mode #p-sale { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+  body.ops-mode #p-sale > h1 { flex: none; }
+  body.ops-mode #f-sale { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  body.ops-mode #f-sale > * { flex: none; }
+  body.ops-mode #f-sale > #sl-cart { flex: 1 1 0; min-height: 56px; overflow-y: auto; }
+  body.ops-mode #sl-live:empty { display: none; }
+  body.ops-mode .sale-foot { display: grid; grid-template-columns: 1fr minmax(200px, 1.2fr); gap: 12px; align-items: center; }
+  body.ops-mode .ops-main .grade-grid { grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
+  body.ops-mode .ops-main .cust-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+  body.ops-mode .ops-main .cust-chips .chip { flex: none; }
+}
+/* Низкий экран (обычное окно браузера, ноутбук): заголовок над формой не нужен — операция крупно написана на табло */
+@media (min-width: 1000px) and (max-height: 720px) {
+  body.ops-mode main { padding: 10px 20px; }
+  body.ops-mode .ops-main h1.page { display: none; }
+  body.ops-mode .ops-main .card { padding: 12px 14px; }
+  body.ops-mode .ops-main .stack > * + * { margin-top: 8px; }
+  body.ops-mode .gtile { min-height: 50px; padding: 8px 10px; }
+  body.ops-mode #f-sale > #sl-cart { min-height: 48px; }
+}
