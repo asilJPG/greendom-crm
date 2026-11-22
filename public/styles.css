@@ -678,7 +678,7 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
   body.ops-mode #f-sale > #sl-cart { flex: 1 1 0; min-height: 56px; overflow-y: auto; }
   body.ops-mode #sl-live:empty { display: none; }
   body.ops-mode .sale-foot { display: grid; grid-template-columns: 1fr minmax(200px, 1.2fr); gap: 12px; align-items: center; }
-  body.ops-mode .ops-main .grade-grid { grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
+  body.ops-mode .ops-main .grade-grid { grid-template-columns: repeat(auto-fit, minmax(94px, 1fr)); gap: 8px; }
   body.ops-mode .ops-main .cust-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
   body.ops-mode .ops-main .cust-chips .chip { flex: none; }
 }
@@ -690,4 +690,27 @@ dialog#drill-dlg, dialog#rec-dlg { width: min(680px, 100%); }
   body.ops-mode .ops-main .stack > * + * { margin-top: 8px; }
   body.ops-mode .gtile { min-height: 50px; padding: 8px 10px; }
   body.ops-mode #f-sale > #sl-cart { min-height: 48px; }
+}
+/* Табло крупнее: цифры максимально большие, подписи над и под ними скромнее.
+   Шрифт сайта с цифрами одинаковой ширины: обычный ноль (у моноширинного он перечёркнут и на камере путается с 8 и Ø). */
+@media (min-width: 900px) {
+  .sc-digits { font-family: Figtree, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums lining-nums; letter-spacing: -.035em; }
+  .sc-cap { font-size: 12px; }
+  .sc-ctx { font-size: clamp(16px, 1.5vw, 26px); margin-top: 4px; }
+  .sc-stat { font-size: clamp(13px, 1vw, 17px); padding: 4px 14px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (min-width: 1000px) {
+  /* табло шире (форма справа у́же), отступы меньше: цифры максимально крупные, «999.999 кг» помещается */
+  body.ops-mode .ops-wrap { grid-template-columns: minmax(0, 1.8fr) minmax(360px, 1fr); }
+  body.ops-mode .scale-panel { padding: 14px 16px; }
+  body.ops-mode .sc-digits { font-size: clamp(64px, min(23.5cqi, 32vh), 420px); margin: 2px 0 6px; }
+  body.ops-mode .sc-digits small { font-size: .22em; }
+  body.ops-mode .sc-cap .btn { right: 12px; }
+}
+@media (min-width: 1000px) {
+  /* «Итого» в узкой колонке: подпись мелко сверху, сумма одной строкой, кнопка рядом */
+  body.ops-mode .sale-foot { grid-template-columns: minmax(0, 1fr) minmax(170px, auto); }
+  body.ops-mode .sale-foot > div { display: block !important; min-width: 0; }
+  body.ops-mode .sale-foot > div > span { display: block; font-size: 12.5px; }
+  body.ops-mode #sl-total { display: block; font-size: 19px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
