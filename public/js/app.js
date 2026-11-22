@@ -951,7 +951,7 @@ guard($('in-go'), async (id) => {
   const w = getActiveWeightKg();
   if (!w.ok) { toast(w.error, true); return false; }
   const ok = await sendCmd('intake', { grade: state.selGrade.in, net_kg: w.net, worker: '', note: $('in-note').value }, id);
-  if (ok) { $('in-note').value = ''; clearManualWeight(); }
+  if (ok) { camFlash('Приход записан', `${kg(w.net)} кг`, state.selGrade.in); $('in-note').value = ''; clearManualWeight(); }
   return ok;
 });
 
@@ -1003,6 +1003,33 @@ function updateSaleLive() {
 }
 setInterval(updateSaleLive, 400);
 
+// Подпись над весом на табло: что сейчас делается (видно на камере рядом с цифрами)
+function updateScaleCtx() {
+  const el = $('sc-ctx');
+  if (!el || !el.offsetParent) return;
+  const t = state.tab;
+  const text = t === 'intake' ? `Приход · ${state.selGrade.in || 'выберите сорт'}`
+    : t === 'sale' ? `Продажа · ${state.selGrade.sl || 'выберите сорт'}${state.selCustomer ? ` → ${state.selCustomer}` : ''}`
+      : t === 'writeoff' ? `Списание · ${state.selGrade.wo || 'выберите сорт'} · ${state.woReason || ''}` : '';
+  if (el.textContent !== text) el.textContent = text;
+}
+setInterval(updateScaleCtx, 300);
+
+// Крупная плашка «записано» на весь экран: на видео с камеры видно, какой вес и что именно ушло в базу.
+let camTimer = null;
+function camFlash(kind, num, sub, ms = 4000) {
+  const box = $('camflash');
+  if (!box) return;
+  $('cf-kind').textContent = kind;
+  $('cf-num').textContent = num;
+  $('cf-sub').textContent = sub || '';
+  $('cf-time').textContent = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  box.hidden = false;
+  clearTimeout(camTimer);
+  camTimer = setTimeout(() => { box.hidden = true; }, ms);
+}
+$('camflash').onclick = () => { clearTimeout(camTimer); $('camflash').hidden = true; };
+
 $('sl-add-pos').onclick = () => {
   if (!state.selGrade.sl) return toast('Выберите сорт', true);
   const pr = readDecimal('sl-price', { label: 'Цена за кг', max: 1e9 });
@@ -1021,6 +1048,7 @@ $('sl-add-pos').onclick = () => {
   if (!Number.isFinite(amount) || amount < 0) return toast('Неверная сумма', true);
   if (amount === 0 && !confirm(`Позиция «${state.selGrade.sl}» ${kg(w.net)} кг на сумму 0 ${state.cur}. Добавить бесплатно?`)) return;
   state.saleCart.push({ grade: state.selGrade.sl, net_kg: w.net, price_per_kg: price, amount });
+  camFlash('Позиция добавлена', `${kg(w.net)} кг`, `${state.selGrade.sl} · ${money(amount)} ${state.cur}`, 2500);
   $('sl-amt-ov').value = '';
   clearManualWeight();
   renderSaleCart();
@@ -1031,8 +1059,10 @@ guard($('sl-go'), async (id) => {
   if (!state.saleCart.length) { toast('Добавьте хотя бы одну позицию', true); return false; }
   const total = round2(state.saleCart.reduce((a, i) => a + Number(i.amount || 0), 0));
   if (total <= 0 && !confirm(`Сумма продажи 0 ${state.cur}. Провести продажу без оплаты?`)) return false;
+  const totalKg = round3(state.saleCart.reduce((a, i) => a + Number(i.net_kg || 0), 0));
   const ok = await sendCmd('sale', { customer: state.selCustomer, note: $('sl-note').value, items: state.saleCart }, id);
   if (ok) {
+    camFlash('Продажа проведена', `${kg(totalKg)} кг`, `${state.selCustomer} · ${money(total)} ${state.cur}`);
     state.saleCart = [];
     $('sl-note').value = '';
     $('sl-price').value = '';
@@ -1057,7 +1087,7 @@ guard($('wo-go'), async (id) => {
   const extra = $('wo-reason').value.trim();
   const reason = extra ? `${state.woReason}: ${extra}` : state.woReason;
   const ok = await sendCmd('writeoff', { grade: state.selGrade.wo, net_kg: w.net, reason }, id);
-  if (ok) { $('wo-reason').value = ''; clearManualWeight(); }
+  if (ok) { camFlash('Списание записано', `${kg(w.net)} кг`, `${state.selGrade.wo} · ${reason}`); $('wo-reason').value = ''; clearManualWeight(); }
   return ok;
 });
 

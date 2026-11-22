@@ -1,5 +1,5 @@
 // Service Worker: кеширует оболочку сайта (Network-First), чтобы моноблок открывался и работал даже без интернета.
-const CACHE = 'teplica-shell-v1';
+const CACHE = 'teplica-shell-v2';
 const ASSETS = [
   '/',
   '/index.html',

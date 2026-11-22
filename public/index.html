@@ -126,6 +126,7 @@
         <div class="scale-col">
           <div class="scale-panel">
             <div class="sc-cap"><span>Весы · Нетто</span><button class="btn sec sm" id="sc-mode-btn" hidden>Ввести вручную</button></div>
+            <div class="sc-ctx" id="sc-ctx"></div>
             <div class="sc-digits" id="sc-digits">0.000<small>кг</small></div>
             <div class="sc-stat" id="sc-stat">Ручной ввод веса</div>
             <div class="sc-manual-box" id="sc-manual-box">
@@ -771,5 +772,12 @@
 <div id="print-root"></div>
 <div class="toast" id="toast"></div>
 <script type="module" src="/js/app.js"></script>
+<!-- Крупная плашка «записано» для камеры: что именно ушло в базу, видно на видео рядом с весами -->
+<div class="camflash" id="camflash" hidden role="status" aria-live="assertive">
+  <div class="cf-kind" id="cf-kind"></div>
+  <div class="cf-num" id="cf-num"></div>
+  <div class="cf-sub" id="cf-sub"></div>
+  <div class="cf-time" id="cf-time"></div>
+</div>
 </body>
 </html>
