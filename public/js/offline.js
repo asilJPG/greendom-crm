@@ -1,7 +1,7 @@
 // Оффлайн-хранилище (IndexedDB) и очередь складских операций для работы моноблока без интернета.
 // Когда сеть пропадает: приход, продажа и списание сохраняются локально в IndexedDB с тем же request_id.
 // Когда сеть появляется: очередь автоматически отправляется в /api/command в хронологическом порядке (без дублей).
-import { rawCall } from './api.js';
+import { rawCall, net } from './api.js';
 
 const DB_NAME = 'teplica_offline_v1';
 const DB_VER = 1;
@@ -68,7 +68,7 @@ export async function enqueueOffline(kind, payload, request_id) {
   const item = { request_id, kind, payload, created_at: Date.now() };
   await idbTx('outbox', 'readwrite', (s) => s.put(item));
   const count = (await listOutbox()).length;
-  onChangeCb({ online: navigator.onLine, pending: count });
+  onChangeCb({ online: net.ok, pending: count });
   return count;
 }
 
@@ -77,7 +77,7 @@ async function removeOutbox(request_id) {
 }
 
 export async function flushOfflineQueue() {
-  if (flushing || !navigator.onLine) return { sent: 0, remaining: (await listOutbox()).length };
+  if (flushing) return { sent: 0, remaining: (await listOutbox()).length };
   flushing = true;
   let sent = 0;
   let failedMsgs = [];
@@ -105,7 +105,7 @@ export async function flushOfflineQueue() {
       }
     }
     const remaining = (await listOutbox()).length;
-    onChangeCb({ online: navigator.onLine, pending: remaining });
+    onChangeCb({ online: net.ok, pending: remaining });
     if (sent > 0 || failedMsgs.length > 0) onSyncedCb({ sent, remaining, failedMsgs });
     return { sent, remaining };
   } finally {
@@ -154,7 +154,7 @@ export async function initOffline({ onChange, onSynced } = {}) {
 
   const update = async () => {
     const pending = (await listOutbox()).length;
-    onChangeCb({ online: navigator.onLine, pending });
+    onChangeCb({ online: net.ok, pending });
   };
 
   window.addEventListener('online', async () => {
@@ -163,12 +163,15 @@ export async function initOffline({ onChange, onSynced } = {}) {
   });
   window.addEventListener('offline', update);
 
+  // очередь досылается сама: пробуем каждые 15 с, пока сервер не ответит (navigator.onLine не спрашиваем)
   setInterval(async () => {
-    if (navigator.onLine) {
-      const items = await listOutbox();
-      if (items.length) await flushOfflineQueue();
-    }
+    const items = await listOutbox();
+    if (items.length) await flushOfflineQueue();
   }, 15000);
+  window.addEventListener('netchange', async (e) => {
+    await update();
+    if (e.detail && e.detail.ok) await flushOfflineQueue();
+  });
 
   await update();
 }

@@ -1,4 +1,4 @@
-import { api, rawCall, errMsg, configureAuthHandlers, newRequestId } from './api.js';
+import { api, rawCall, errMsg, configureAuthHandlers, newRequestId, net } from './api.js';
 import { readDecimal, parseDecimal, clearInvalidOnInput, round2, round3 } from './num.js';
 import { initScale, autoConnectScale, getActiveWeightKg, clearManualWeight, renderDisplay } from './scale.js';
 import { isPasskeySupported, registerPasskey, loginWithPasskey } from './passkey.js';
@@ -290,7 +290,7 @@ async function logout() {
   showLogin();
 }
 
-let offlineState = { online: navigator.onLine, pending: 0 };
+let offlineState = { online: true, pending: 0 };
 
 function paintConn(st) {
   if (st) offlineState = st;
@@ -329,8 +329,7 @@ function paintStatus(d) {
 }
 
 async function refreshAll() {
-  if (!navigator.onLine) return;
-  const s = await api('GET', '/api/status');
+  const s = await api('GET', '/api/status'); // заодно проверка связи: ответ есть — «Онлайн», нет — «Оффлайн»
   if (s.ok) {
     cacheSet('status', s.data);
     paintStatus(s.data);
@@ -383,12 +382,10 @@ async function start() {
 /* ───── остатки ───── */
 async function loadStock() {
   let base = null;
-  if (navigator.onLine) {
-    const r = await api('GET', '/api/stock');
-    if (r.ok) {
-      base = r.data;
-      cacheSet('stock', base);
-    }
+  const r = await api('GET', '/api/stock');
+  if (r.ok) {
+    base = r.data;
+    cacheSet('stock', base);
   }
   if (!base) base = await cacheGet('stock');
   if (!base) return;
@@ -749,11 +746,8 @@ const KIND_DONE = { intake: 'Приход записан', sale: 'Продажа
 async function sendCmd(kind, payload, requestId) {
   const reqId = requestId || rid();
   let r;
-  if (!navigator.onLine && isQueueableKind(kind)) {
-    r = { ok: false, status: 0 };
-  } else {
-    r = await api('POST', '/api/command', { kind, payload, request_id: reqId });
-  }
+  // всегда сначала пробуем отправить на сервер; в очередь — только если связи действительно нет
+  r = await api('POST', '/api/command', { kind, payload, request_id: reqId });
   if (!r.ok) {
     if (r.status === 0 && isQueueableKind(kind)) {
       const cnt = await enqueueOffline(kind, payload, reqId);

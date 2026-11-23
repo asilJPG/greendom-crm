@@ -8,17 +8,35 @@ export function configureAuthHandlers({ unauthorized, mustChange }) {
   if (mustChange) onMustChange = mustChange;
 }
 
+// Связь определяем по настоящим запросам, а не по navigator.onLine: на Windows браузер иногда считает,
+// что сети нет (Wi-Fi моргнул, «Нет подключения к Интернету»), хотя сервер отвечает. Тогда сайт копил операции
+// в очереди и другие устройства их не видели.
+export const net = { ok: true };
+function setNet(ok) {
+  if (net.ok === ok) return;
+  net.ok = ok;
+  try { window.dispatchEvent(new CustomEvent('netchange', { detail: { ok } })); } catch {}
+}
+
 export async function rawCall(method, path, body) {
   let res;
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  // запрос, который висит дольше этого времени, считаем обрывом связи
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), method === 'GET' ? 15000 : 20000) : null;
   try {
     res = await fetch(path, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ctrl ? ctrl.signal : undefined,
     });
   } catch {
+    setNet(false);
     return { ok: false, status: 0, data: { error: 'Нет связи с сервером. Проверьте интернет и повторите' } };
+  } finally {
+    if (timer) clearTimeout(timer);
   }
+  setNet(true);
   let data = null;
   try {
     data = await res.json();
