@@ -336,7 +336,12 @@ async function refreshAll() {
     paintStatus(s.data);
   }
   if (state.tab === 'stock') loadStock();
+  // экраны операций: плитки «на складе» тоже свежие (иначе моноблок не видит продаж с телефона, пока не уйти со страницы)
+  else if (['intake', 'sale', 'writeoff'].includes(state.tab)) { await loadStock(); renderOpsTiles(); }
 }
+// вернулись на вкладку или появилась сеть — сразу обновить, не дожидаясь таймера
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.me) refreshAll(); });
+window.addEventListener('focus', () => { if (state.me) refreshAll(); });
 
 async function start() {
   let r = await rawCall('GET', '/api/status');
@@ -372,7 +377,7 @@ async function start() {
   }
 
   clearInterval(state.timer);
-  state.timer = setInterval(refreshAll, 30000);
+  state.timer = setInterval(refreshAll, 15000);
 }
 
 /* ───── остатки ───── */

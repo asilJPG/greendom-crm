@@ -132,7 +132,12 @@ export function applyOutboxToStock(stockData, outbox) {
     if (it.kind === 'intake') addDelta(p.grade, 'in_kg', Number(p.net_kg || 0));
     else if (it.kind === 'writeoff') addDelta(p.grade, 'writeoff_kg', Number(p.net_kg || 0));
     else if (it.kind === 'sale') {
-      for (const s of p.items || []) addDelta(s.grade, 'out_kg', Number(s.net_kg || 0));
+      // как на сервере: продано = вес − скидка весом, скидка весом = списание (потеря)
+      for (const s of p.items || []) {
+        const free = Number(s.free_kg || 0);
+        addDelta(s.grade, 'out_kg', Number(s.net_kg || 0) - free);
+        if (free > 0) addDelta(s.grade, 'writeoff_kg', free);
+      }
     }
   }
   const total_kg = Math.round(rows.reduce((a, r) => a + r.balance_kg, 0) * 1000) / 1000;
