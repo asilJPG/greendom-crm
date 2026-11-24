@@ -840,16 +840,7 @@ $('lg-go').onclick = login;
 $('lg-pw').onkeydown = (e) => { if (e.key === 'Enter') login(); };
 $('logout-btn').onclick = logout;
 
-$('menu').onclick = () => { $('md-name').textContent = state.me.name; $('md-role').textContent = ROLE_NAME[state.me.role] || state.me.role; $('md-tg').hidden = state.me.role !== 'admin'; $('menu-dlg').showModal(); loadPasskeys(); };
-$('md-tg').onclick = async () => {
-  const b = $('md-tg');
-  b.disabled = true;
-  try {
-    const r = await api('POST', '/api/status?resource=tgtest', {});
-    if (r.ok && r.data.ok) toast('Тест отправлен — проверьте тему в Telegram');
-    else toast((r.data && r.data.error) || errMsg(r), true, 6000);
-  } finally { b.disabled = false; }
-};
+$('menu').onclick = () => { $('md-name').textContent = state.me.name; $('md-role').textContent = ROLE_NAME[state.me.role] || state.me.role; $('menu-dlg').showModal(); loadPasskeys(); };
 $('md-close').onclick = () => $('menu-dlg').close();
 $('md-out').onclick = () => { $('menu-dlg').close(); logout(); };
 
