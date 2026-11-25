@@ -254,7 +254,7 @@ details.scale-card[open] summary { margin-bottom: 12px; padding-bottom: 10px; bo
 .b-active { background: #198100; color: #ffffff; }
 .b-in, .b-applied { background: var(--grn-bg); color: var(--grn); }
 .b-admin { background: var(--vio-bg); color: var(--vio); }
-.b-out, .b-blue { background: var(--blu-bg); color: var(--blu); }
+.b-out, .b-blue, .b-accountant { background: var(--blu-bg); color: var(--blu); }
 .b-director { background: var(--soft2); color: var(--ink); }
 .b-writeoff, .b-keeper, .b-pending { background: var(--amb-bg); color: var(--amb); }
 .b-off, .b-expired { background: var(--soft2); color: var(--mut); }

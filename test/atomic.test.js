@@ -375,3 +375,49 @@ test('инвестиции по годам: неокупленный остат�
   assert.equal(r25.body.summary.total_invested, 600000);
   assert.equal(r25.body.summary.remaining, 600000);
 });
+
+test('роль бухгалтер (accountant): может добавлять расходы, ЗП, оплаты, инвестиции и контрагентов, но не менять и не удалять', async () => {
+  const accPw = 'accountant-pw-123';
+  const uRes = await call(usersApi, { method: 'POST', headers: { cookie }, body: { name: 'Бухгалтер-тест', role: 'accountant', password: accPw } });
+  assert.equal(uRes.code, 200, JSON.stringify(uRes.body));
+  const accLogin = await call(login, { method: 'POST', body: { password: accPw } });
+  assert.equal(accLogin.code, 200);
+  assert.equal(accLogin.body.role, 'accountant');
+  const accCookie = String(accLogin.headers['Set-Cookie']).split(';')[0];
+
+  const accFin = (resource, method, body) => call(report, { method, query: { resource }, body, headers: { cookie: accCookie } });
+  const accRefs = (method, body) => call(status, { method, query: { resource: 'refs' }, body, headers: { cookie: accCookie } });
+
+  // 1. Может добавлять (POST): расход, работника, ЗП, оплату, инвестицию, контрагента
+  const cat = await one(`SELECT id FROM expense_categories WHERE active LIMIT 1`);
+  const exp = await accFin('expenses', 'POST', { doc_date: today, category_id: cat.id, amount: 12000, comment: 'от бухгалтера' });
+  assert.equal(exp.code, 200, JSON.stringify(exp.body));
+
+  const st = await accFin('payroll', 'POST', { target: 'staff', name: 'Работник-бух', position: 'Рабочий', salary: 3000000 });
+  assert.equal(st.code, 200, JSON.stringify(st.body));
+
+  const payZp = await accFin('payroll', 'POST', { target: 'payout', doc_date: today, employee: 'Работник-бух', amount: 500000, pay_kind: 'Аванс' });
+  assert.equal(payZp.code, 200, JSON.stringify(payZp.body));
+
+  const pay = await accFin('payments', 'POST', { doc_date: today, counterparty: 'Атом-покупатель', direction: 'in', amount: 15000 });
+  assert.equal(pay.code, 200, JSON.stringify(pay.body));
+
+  const inv = await accFin('investments', 'POST', { doc_date: today, title: 'Инвест от бухгалтера', amount: 25000 });
+  assert.equal(inv.code, 200, JSON.stringify(inv.body));
+
+  const cp = await accRefs('POST', { target: 'customer', name: 'Контрагент-бух', kind: 'supplier' });
+  assert.equal(cp.code, 200, JSON.stringify(cp.body));
+
+  // 2. НЕ может менять, отменять или удалять (PATCH -> 403), и не может создавать категории/сорта/складские операции
+  assert.equal((await accFin('expenses', 'PATCH', { id: exp.body.id, action: 'edit', amount: 1 })).code, 403);
+  assert.equal((await accFin('expenses', 'PATCH', { id: exp.body.id, reason: 'удалить' })).code, 403);
+  assert.equal((await accFin('expenses', 'POST', { target: 'category', name: 'Чужая категория' })).code, 403);
+  assert.equal((await accFin('payroll', 'PATCH', { target: 'staff', id: st.body.id, active: false })).code, 403);
+  assert.equal((await accFin('payroll', 'PATCH', { target: 'payout', id: payZp.body.id, reason: 'удалить' })).code, 403);
+  assert.equal((await accFin('payments', 'PATCH', { id: pay.body.id, reason: 'удалить' })).code, 403);
+  assert.equal((await accFin('investments', 'PATCH', { id: inv.body.id, action: 'edit', amount: 1 })).code, 403);
+  assert.equal((await accFin('investments', 'PATCH', { id: inv.body.id, reason: 'удалить' })).code, 403);
+  assert.equal((await accRefs('PATCH', { target: 'customer', id: cp.body.customer.id, active: false })).code, 403);
+  assert.equal((await accRefs('POST', { target: 'grade', name: 'Сорт-бух' })).code, 403);
+  assert.equal((await call(commandApi, { method: 'POST', headers: { cookie: accCookie }, body: { kind: 'intake', payload: { grade: 'Высший', net_kg: 1 } } })).code, 403);
+});

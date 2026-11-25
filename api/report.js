@@ -28,9 +28,13 @@ function csvCell(v) {
 }
 
 module.exports = handler(async (req, res) => {
-  // Все финансовые записи (расходы, оплаты, инвестиции) — только администратор; директор — только чтение.
-  if (req.method !== 'GET' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'изменять финансовые данные может только администратор' });
+  // Администратор — полный доступ; бухгалтер — только добавление (POST); директор — только чтение (GET).
+  const canPost = req.user.role === 'admin' || req.user.role === 'accountant';
+  if (req.method === 'POST' && !canPost) {
+    return res.status(403).json({ error: 'добавлять финансовые документы может только администратор или бухгалтер' });
+  }
+  if (req.method === 'PATCH' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'изменять и удалять финансовые документы может только администратор' });
   }
   if (req.query.resource === 'expenses') return handleExpenses(req, res);
   if (req.query.resource === 'reconcile') return handleReconcile(req, res);
@@ -267,4 +271,4 @@ module.exports = handler(async (req, res) => {
     manual_entries: manual.n,
     cancelled_entries: cancelled.n,
   });
-}, { method: ['GET', 'POST', 'PATCH'], roles: ['director', 'admin'] });
+}, { method: ['GET', 'POST', 'PATCH'], roles: ['director', 'accountant', 'admin'] });

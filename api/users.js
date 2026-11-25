@@ -2,7 +2,7 @@ const { query } = require('../lib/db');
 const { handler, TZ } = require('../lib/http');
 const { MIN_PASSWORD, hashPassword, encryptPassword, decryptPassword, passwordTaken, audit } = require('../lib/auth');
 
-const ROLES = ['admin', 'director', 'keeper'];
+const ROLES = ['admin', 'director', 'keeper', 'accountant'];
 
 function cleanName(v) {
   const n = String(v || '').trim();

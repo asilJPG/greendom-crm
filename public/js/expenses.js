@@ -15,6 +15,7 @@ const UNITS = ['шт', 'кг', 'л', 'усл', 'час', 'м', 'уп'];
 let deps = { me: () => null, today: () => iso(new Date()), cur: () => 'сум', crop: () => 'Клубника', toast: () => {}, askText: async () => null };
 let actReqId = newRequestId(); // request_id формы нового акта: один на форму, новый после успеха
 const isAdmin = () => { const me = deps.me(); return !!me && me.role === 'admin'; };
+const canAdd = () => { const me = deps.me(); return !!me && (me.role === 'admin' || me.role === 'accountant'); };
 const todayStr = () => (deps.today ? deps.today() : iso(new Date()));
 let categories = [];
 let loadedItems = [];
@@ -292,7 +293,7 @@ export async function loadExpenses() {
   showExpView('list');
   setDefaultPeriod();
   const cur = deps.cur();
-  $('e-open-add').hidden = !isAdmin();
+  $('e-open-add').hidden = !canAdd();
   $('e-open-cats').hidden = !isAdmin();
 
   const qs = new URLSearchParams({ resource: 'expenses', from: $('e-from').value, to: $('e-to').value });
@@ -368,7 +369,7 @@ export function initExpenses(config) {
   $('e-cat-filter').onchange = loadExpenses;
 
   // Страница создания акта
-  $('e-open-add').onclick = () => { if (isAdmin()) openNewActPage(); };
+  $('e-open-add').onclick = () => { if (canAdd()) openNewActPage(); };
   $('exp-back').onclick = () => showExpView('list');
   $('exp-cancel').onclick = () => showExpView('list');
   $('exp-add-line').onclick = () => {
@@ -384,7 +385,10 @@ export function initExpenses(config) {
   $('exp-save').onclick = async () => {
     const b = $('exp-save');
     if (b.disabled) return;
-    if (!isAdmin()) { $('exp-err').textContent = 'Проводить акты расхода может только администратор'; return; }
+    if (editingActId ? !isAdmin() : !canAdd()) {
+      $('exp-err').textContent = editingActId ? 'Изменять акты расхода может только администратор' : 'Проводить акты расхода может только администратор или бухгалтер';
+      return;
+    }
     const items = [];
     for (let i = 0; i < draftLines.length; i++) {
       const l = draftLines[i];

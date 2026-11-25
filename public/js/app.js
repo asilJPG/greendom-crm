@@ -24,7 +24,7 @@ const dm = (s) => s.slice(8, 10) + '.' + s.slice(5, 7);
 const rid = newRequestId;
 
 const GRADE_COLORS = ['#c79a1c', '#2c7a4e', '#2a6aa8', '#8a5fb0', '#b1362d', '#2f8f89', '#a86a2a', '#5a6b80'];
-const ROLE_NAME = { admin: 'Администратор', director: 'Директор', keeper: 'Складовщик' };
+const ROLE_NAME = { admin: 'Администратор', director: 'Директор', accountant: 'Бухгалтер', keeper: 'Складовщик' };
 const TYPE_META = { in: ['Приход', 'b-in', '#2c7a4e'], out: ['Продажа', 'b-out', '#2a6aa8'], writeoff: ['Списание', 'b-writeoff', '#a8650c'] };
 const KIND = { intake: 'Приход', sale: 'Продажа', writeoff: 'Списание', cancel_movement: 'Отмена записи', cancel_sale: 'Отмена продажи', edit: 'Исправление' };
 const ST = { pending: ['ждёт склад', 'b-pending'], applied: ['выполнено', 'b-applied'], rejected: ['отклонено', 'b-rejected'], expired: ['просрочено', 'b-expired'] };
@@ -36,12 +36,12 @@ const ROUTES = [
   ['sale', '/sale', 'Продажа', 'i-out', ['keeper', 'admin'], 'Склад'],
   ['writeoff', '/writeoff', 'Списание', 'i-wo', ['keeper', 'admin'], 'Склад'],
   ['history', '/history', 'История', 'i-history', null, 'Склад'],
-  ['report', '/report', 'Отчёт (ОПиУ)', 'i-report', ['director', 'admin'], 'Административное'],
-  ['expenses', '/expenses', 'Расходы', 'i-exp', ['director', 'admin'], 'Административное'],
-  ['payroll', '/payroll', 'Зарплата', 'i-zp', ['director', 'admin'], 'Административное'],
-  ['payments', '/payments', 'Акты оплаты', 'i-pay', ['director', 'admin'], 'Административное'],
-  ['investments', '/investments', 'Инвестиции', 'i-inv', ['director', 'admin'], 'Административное'],
-  ['counterparties', '/counterparties', 'Контрагенты', 'i-cp', ['director', 'admin'], 'Административное'],
+  ['report', '/report', 'Отчёт (ОПиУ)', 'i-report', ['director', 'accountant', 'admin'], 'Административное'],
+  ['expenses', '/expenses', 'Расходы', 'i-exp', ['director', 'accountant', 'admin'], 'Административное'],
+  ['payroll', '/payroll', 'Зарплата', 'i-zp', ['director', 'accountant', 'admin'], 'Административное'],
+  ['payments', '/payments', 'Акты оплаты', 'i-pay', ['director', 'accountant', 'admin'], 'Административное'],
+  ['investments', '/investments', 'Инвестиции', 'i-inv', ['director', 'accountant', 'admin'], 'Административное'],
+  ['counterparties', '/counterparties', 'Контрагенты', 'i-cp', ['director', 'accountant', 'admin'], 'Административное'],
   ['refs', '/refs', 'Справочники', 'i-refs', ['admin'], 'Администрирование'],
   ['users', '/users', 'Сотрудники', 'i-users', ['admin'], 'Администрирование'],
   ['log', '/log', 'Журнал', 'i-log', ['admin'], 'Администрирование'],

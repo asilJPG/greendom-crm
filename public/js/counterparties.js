@@ -26,22 +26,24 @@ let lastRec = null;
 let payReqId = newRequestId(); // request_id формы оплаты: один на форму, новый после успеха
 let cpReqId = newRequestId(); // request_id создания контрагента
 const isAdmin = () => { const me = deps.me && deps.me(); return !!me && me.role === 'admin'; };
+const canAdd = () => { const me = deps.me && deps.me(); return !!me && (me.role === 'admin' || me.role === 'accountant'); };
 const CRM_FIELDS = ['cp-f-name', 'cp-f-kind', 'cp-f-inn', 'cp-f-contact', 'cp-f-phone', 'cp-f-tg', 'cp-f-addr', 'cp-f-terms', 'cp-f-bank', 'cp-f-note'];
 
-// Директор — только просмотр: прячем создание, оплаты, отмены и сохранение карточки
+// Директор — только просмотр; бухгалтер — только добавление нового контрагента; админ — полный доступ
 function applyRolePerms() {
   const admin = isAdmin();
-  $('cp-open-add').hidden = !admin;
+  const editable = admin || (!currentCp && canAdd());
+  $('cp-open-add').hidden = !canAdd();
   const delChip = document.querySelector('#cp-kind-chips [data-k="deleted"]');
   if (delChip) delChip.hidden = !admin;
   const payTabBtn = document.querySelector('#cp-detail-tabs [data-cpt="pay"]');
   if (payTabBtn) payTabBtn.hidden = !admin;
-  $('cp-f-save').hidden = !admin;
+  $('cp-f-save').hidden = !editable;
   CRM_FIELDS.forEach((id) => {
     const el = $(id);
     if (!el) return;
-    if (el.tagName === 'SELECT') el.disabled = !admin;
-    else el.readOnly = !admin;
+    if (el.tagName === 'SELECT') el.disabled = !editable;
+    else el.readOnly = !editable;
   });
 }
 
@@ -423,7 +425,7 @@ export function initCounterparties(config) {
     renderList();
   };
   $('cp-search').oninput = renderList;
-  $('cp-open-add').onclick = () => { if (isAdmin()) openCpDetail(null, 'crm'); };
+  $('cp-open-add').onclick = () => { if (canAdd()) openCpDetail(null, 'crm'); };
   $('cp-back').onclick = () => showCpView('list');
 
   $('cp-detail-tabs').onclick = (e) => {
@@ -456,7 +458,7 @@ export function initCounterparties(config) {
 
   $('cp-f-save').onclick = async () => {
     const b = $('cp-f-save');
-    if (b.disabled || !isAdmin()) return;
+    if (b.disabled || (currentCp ? !isAdmin() : !canAdd())) return;
     b.disabled = true;
     try {
       const payload = {

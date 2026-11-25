@@ -13,6 +13,7 @@ const PAY_LABEL = { cash: 'Наличные', card: 'Карта', transfer: 'П�
 
 let deps = { me: () => null, cur: () => 'сум', toast: () => {}, askText: async () => null };
 const isAdmin = () => { const me = deps.me && deps.me(); return !!me && me.role === 'admin'; };
+const canAdd = () => { const me = deps.me && deps.me(); return !!me && (me.role === 'admin' || me.role === 'accountant'); };
 
 let subTab = 'payouts'; // payouts | staff
 let staffList = [];
@@ -68,7 +69,7 @@ function renderWorkerChips() {
 }
 
 function openPayoutPage(preselectName = '') {
-  if (!isAdmin()) return;
+  if (!canAdd()) return;
   payReqId = newRequestId();
   selWorker = preselectName || '';
   payKind = 'Зарплата';
@@ -90,7 +91,7 @@ function openPayoutPage(preselectName = '') {
 }
 
 function openStaffPage(s = null) {
-  if (!isAdmin()) return;
+  if (s ? !isAdmin() : !canAdd()) return;
   editStaffTarget = s;
   staffReqId = newRequestId();
   $('pr-st-title').textContent = s ? s.name : 'Новый работник теплицы';
@@ -115,8 +116,9 @@ export async function loadPayroll() {
   setDefaultPeriod();
   const cur = deps.cur();
   const admin = isAdmin();
-  $('pr-open-pay').hidden = !admin;
-  $('pr-open-staff').hidden = !admin;
+  const addAllowed = canAdd();
+  $('pr-open-pay').hidden = !addAllowed;
+  $('pr-open-staff').hidden = !addAllowed;
 
   const qs = new URLSearchParams({ resource: 'payroll', from: $('pr-from').value, to: $('pr-to').value });
   const r = await api('GET', `/api/report?${qs.toString()}`);
@@ -223,7 +225,7 @@ export async function loadPayroll() {
             <div class="small muted" style="margin-top:4px">Выдано за период: <b style="color:var(--ink)">${money(paid)} ${esc(cur)}</b></div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex:none">
-            ${admin && s.active ? `<button type="button" class="btn sm" data-give-zp="${esc(s.name)}">Выдать ЗП</button>` : ''}
+            ${addAllowed && s.active ? `<button type="button" class="btn sm" data-give-zp="${esc(s.name)}">Выдать ЗП</button>` : ''}
             ${admin ? editBtnHtml(`data-edit-st="${s.id}"`, 'Редактировать работника') : ''}
           </div>
         </div>

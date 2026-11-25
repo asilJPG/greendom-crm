@@ -26,6 +26,7 @@ let editingInvId = null;
 let invReqId = newRequestId(); // request_id формы нового вложения: один на форму, новый после успеха
 let selectedYear = String(new Date().getFullYear());
 const isAdmin = () => { const me = deps.me && deps.me(); return !!me && me.role === 'admin'; };
+const canAdd = () => { const me = deps.me && deps.me(); return !!me && (me.role === 'admin' || me.role === 'accountant'); };
 
 function showSubView(mode) {
   $('inv-list-view').hidden = mode !== 'list';
@@ -53,7 +54,7 @@ function openInvestmentForm(x = null) {
 
 export async function loadInvestments() {
   showSubView('list');
-  $('inv-open-add').hidden = !isAdmin();
+  $('inv-open-add').hidden = !canAdd();
   const qs = selectedYear && selectedYear !== 'all' ? `&year=${encodeURIComponent(selectedYear)}` : '';
   const r = await api('GET', `/api/report?resource=investments${qs}`);
   if (!r.ok) return;
@@ -206,7 +207,7 @@ export async function loadInvestments() {
 export function initInvestments(config) {
   deps = config;
   $('inv-f-cat').innerHTML = INV_CATS.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  $('inv-open-add').onclick = () => { if (isAdmin()) openInvestmentForm(null); };
+  $('inv-open-add').onclick = () => { if (canAdd()) openInvestmentForm(null); };
   $('inv-back').onclick = () => showSubView('list');
   $('inv-f-cancel').onclick = () => showSubView('list');
 
@@ -220,7 +221,10 @@ export function initInvestments(config) {
   $('inv-f-save').onclick = async () => {
     const b = $('inv-f-save');
     if (b.disabled) return;
-    if (!isAdmin()) { $('inv-f-err').textContent = 'Вносить вложения может только администратор'; return; }
+    if (editingInvId ? !isAdmin() : !canAdd()) {
+      $('inv-f-err').textContent = editingInvId ? 'Изменять вложения может только администратор' : 'Вносить вложения может только администратор или бухгалтер';
+      return;
+    }
     const amt = readDecimal('inv-f-amt', { label: 'Сумма', positive: true, max: 1e13 });
     if (!amt.ok) { $('inv-f-err').textContent = amt.error; $('inv-f-amt').focus(); return; }
     $('inv-f-err').textContent = '';

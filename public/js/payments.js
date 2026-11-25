@@ -14,6 +14,7 @@ const PAY_LABEL = { cash: 'Наличные', card: 'Карта', transfer: 'П�
 
 let deps = { me: () => null, cur: () => 'сум', toast: () => {}, askText: async () => null };
 const isAdmin = () => { const me = deps.me && deps.me(); return !!me && me.role === 'admin'; };
+const canAdd = () => { const me = deps.me && deps.me(); return !!me && (me.role === 'admin' || me.role === 'accountant'); };
 
 let dirFilter = '';
 let formDir = 'in';
@@ -54,7 +55,7 @@ export async function loadPayments() {
   showPayView('list');
   setDefaultPeriod();
   const cur = deps.cur();
-  $('pm-open-add').hidden = !isAdmin();
+  $('pm-open-add').hidden = !canAdd();
 
   const qs = new URLSearchParams({ resource: 'payments', from: $('pm-from').value, to: $('pm-to').value });
   if (dirFilter) qs.set('direction', dirFilter);
