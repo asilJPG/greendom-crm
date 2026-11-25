@@ -39,17 +39,19 @@ function setDefaultPeriod() {
   }
 }
 
-function renderCategoriesSelects() {
+function renderCategoriesSelects(includeCatId = null) {
   const active = categories.filter((c) => c.active);
   const fSel = $('e-cat-filter');
   const prevF = fSel.value;
   fSel.innerHTML = '<option value="">Все категории</option>' + categories.map((c) => `<option value="${c.id}">${esc(c.name)}${c.active ? '' : ' (скрыта)'}</option>`).join('');
   if (prevF) fSel.value = prevF;
 
+  // Зарплата вносится только через вкладку «Зарплата» (в фильтр списка расходов она остаётся).
+  const formCats = active.filter((c) => c.name.trim().toLowerCase() !== 'зарплата' || String(c.id) === String(includeCatId));
   const dSel = $('exp-cat');
   const prevD = dSel.value;
-  dSel.innerHTML = active.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  if (active.some((c) => String(c.id) === String(prevD))) dSel.value = prevD;
+  dSel.innerHTML = formCats.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  if (formCats.some((c) => String(c.id) === String(prevD))) dSel.value = prevD;
 }
 
 function renderCategoryModal() {
@@ -177,12 +179,12 @@ function openNewActPage() {
   editingActId = null;
   payMethod = 'cash';
   $('exp-form-title').textContent = 'Новый акт расхода';
+  renderCategoriesSelects();
   $('exp-save').textContent = 'Провести акт расхода';
   $('exp-err').textContent = '';
   $('exp-date').value = todayStr();
   $('exp-docno').value = '';
   $('exp-cp').value = '';
-  $('exp-emp').value = '';
   $('exp-comment').value = '';
   document.querySelectorAll('#exp-pay-chips .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
   draftLines = [{ name: '', qty: '1', unit: 'усл', price: '', sum: '' }];
@@ -196,12 +198,12 @@ function openEditActPage(x) {
   payMethod = x.payment_method || 'cash';
   $('exp-form-title').textContent = `Редактирование акта №${x.id}`;
   $('exp-save').textContent = 'Сохранить изменения';
+  renderCategoriesSelects(x.category_id);
   $('exp-err').textContent = '';
   $('exp-date').value = x.doc_date || todayStr();
   $('exp-docno').value = x.doc_number || '';
   $('exp-cat').value = String(x.category_id);
   $('exp-cp').value = x.counterparty || '';
-  $('exp-emp').value = x.employee || '';
   $('exp-comment').value = x.comment || '';
   document.querySelectorAll('#exp-pay-chips .chip').forEach((c) => c.classList.toggle('sel', c.dataset.pm === payMethod));
   const items = Array.isArray(x.items) && x.items.length ? x.items : null;
@@ -418,7 +420,6 @@ export function initExpenses(config) {
         amount: total,
         items,
         counterparty: $('exp-cp').value,
-        employee: $('exp-emp').value,
         payment_method: payMethod,
         comment: $('exp-comment').value,
       };

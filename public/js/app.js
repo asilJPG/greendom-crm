@@ -1225,7 +1225,6 @@ const empSuggestions = () => {
   }));
 };
 attachAutocomplete($('exp-cp'), cpSuggestions);
-attachAutocomplete($('exp-emp'), empSuggestions);
 attachAutocomplete($('pm-f-cp'), cpSuggestions);
 attachAutocomplete($('inv-f-investor'), cpSuggestions);
 attachAutocomplete($('ed-cust'), cpSuggestions);
